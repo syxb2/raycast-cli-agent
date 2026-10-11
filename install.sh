@@ -59,12 +59,11 @@ cp "$DEST/package.json" "$HOME_DIR/package.json"
 echo "$VERSION" > "$HOME_DIR/VERSION"
 ok "Dosyalar yerleştirildi"
 
-# `ray develop`'un Raycast'e gonderdigi bildirimlerin aynisi: start kaydeder,
-# build-refresh derlenmis dosyalari yeniden yukletir. Raycast kapaliysa acilir.
+# `ray develop`'un derleme sonrasi Raycast'e gonderdigi bildirim: eklentiyi
+# gelistirme eklentisi olarak kaydeder/yeniden yukler. "start" Raycast
+# penceresini de acar, gerek yok. Raycast kapaliysa open onu baslatir.
 CWD="$(/usr/bin/python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$HOME_DIR")"
-open -g -b com.raycast.macos "raycast://cli/$NAME/start?cwd=$CWD&info="
-sleep 2
-open -g -b com.raycast.macos "raycast://cli/$NAME/build-refresh?cwd=$CWD&info="
+open -g -b com.raycast.macos "raycast://cli/$NAME/build-success?cwd=$CWD&info="
 ok "Raycast'e kaydedildi"
 
 echo
