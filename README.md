@@ -2,9 +2,19 @@
 
 # CLI Assistant
 
-AI in Raycast without Raycast Pro: ask questions, chat, and fix, translate, summarize or explain selected text. Requests go through the [Claude Code](https://code.claude.com) or [Codex](https://github.com/openai/codex) CLI installed on your Mac and signed in with your own account, so usage counts against your Claude or ChatGPT plan, not Raycast AI credits. Use either one, or both side by side.
+**Raycast AI on the Claude or ChatGPT plan you already pay for.**
 
-> Not affiliated with, built by, or endorsed by Anthropic, OpenAI or Raycast.
+Claude and ChatGPT plans include a coding CLI: Claude Code and Codex. This Raycast extension runs your requests through whichever one is installed and signed in on your Mac, so you get the everyday Raycast AI features without a Raycast Pro subscription, an API key or per-token billing.
+
+- **Ask AI** from root search, and **Chat** with follow-ups and history
+- **Fix Spelling and Grammar**, **Improve Writing**, **Make Shorter**: rewrite the selection in place
+- **Translate** as you type, or **Translate and Replace** the selection with one hotkey
+- **Summarize** and **Explain** the selection
+- Any model your plan offers (Haiku, Sonnet, Opus, GPT-5.6…), switchable mid-chat, even between Claude and Codex
+
+How it stays fast and cheap: the CLIs are coding agents, so the extension turns off their tools, MCP servers, settings files and agent prompts. That brings Claude Code's first answer from ~9 s to ~3 s and Codex's prompt from ~17.6k to ~4.5k tokens. Details in [How it works](#how-it-works).
+
+> Not affiliated with, built by, or endorsed by Anthropic, OpenAI or Raycast. It runs the official, unmodified CLIs; sign-in stays with them.
 
 ## Install
 
