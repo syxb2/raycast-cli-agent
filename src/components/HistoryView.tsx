@@ -8,7 +8,7 @@ import {
   List,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { modelLabel } from "../lib/format";
+import { modelLabel } from "../lib/models";
 import {
   ConversationSummary,
   deleteConversation,

@@ -15,6 +15,8 @@ import {
 } from "./lib/prompts";
 import { readSourceText } from "./lib/selection";
 import { useClaudeStream } from "./lib/useClaudeStream";
+import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
+import { ModelSubmenu } from "./components/shared";
 
 // Raycast'in Translate'i gibi: arama kutusu girdi, yazmayi birakinca cevirir.
 // Her istek ~3 sn surdugu icin tus basimlarini bekletip tek istek atiyoruz.
@@ -25,6 +27,7 @@ export default function Command() {
   const [text, setText] = useState("");
   const [language, setLanguage] = useState<string>();
   const [ready, setReady] = useState(false);
+  const [model, setModel] = useState(currentModel);
   const stream = useClaudeStream();
   const lastRequest = useRef("");
 
@@ -46,19 +49,25 @@ export default function Command() {
       stream.stop();
       return;
     }
-    const key = `${language}:${input}`;
+    const key = `${model}:${language}:${input}`;
     if (key === lastRequest.current) return;
     const t = setTimeout(() => {
       lastRequest.current = key;
       stream.run({
         prompt: input,
+        model,
         systemPrompt: translateSystemPrompt(
           resolveTargetLanguage(input, language),
         ),
       });
     }, DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [text, language, ready]);
+  }, [text, language, model, ready]);
+
+  const changeModel = (value: string) => {
+    setCurrentModel(value);
+    setModel(value);
+  };
 
   const changeLanguage = (value: string) => {
     setLanguage(value);
@@ -109,28 +118,36 @@ export default function Command() {
           title={`→ ${LANGUAGES.find((l) => l.value === resolveTargetLanguage(text, language ?? "auto"))?.title ?? ""}`}
           icon={Icon.Globe}
           detail={<List.Item.Detail markdown={markdown} />}
+          subtitle={modelLabel(model)}
           actions={
-            translation ? (
-              <ActionPanel>
-                <Action.Paste
-                  title="Ön Uygulamaya Yapıştır"
-                  content={translation}
-                />
-                <Action.CopyToClipboard
-                  title="Kopyala"
-                  content={translation}
-                  shortcut={Keyboard.Shortcut.Common.Copy}
-                />
-                {language === "auto" ? (
-                  <Action
-                    title="Ters Yöne Çevir"
-                    icon={Icon.Switch}
-                    shortcut={{ modifiers: ["cmd"], key: "t" }}
-                    onAction={() => setText(translation)}
+            <ActionPanel>
+              {translation ? (
+                <>
+                  <Action.Paste
+                    title="Ön Uygulamaya Yapıştır"
+                    content={translation}
                   />
-                ) : null}
-              </ActionPanel>
-            ) : undefined
+                  <Action.CopyToClipboard
+                    title="Kopyala"
+                    content={translation}
+                    shortcut={Keyboard.Shortcut.Common.Copy}
+                  />
+                  {language === "auto" ? (
+                    <Action
+                      title="Ters Yöne Çevir"
+                      icon={Icon.Switch}
+                      shortcut={{ modifiers: ["cmd"], key: "t" }}
+                      onAction={() => setText(translation)}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              <ModelSubmenu
+                title="Model Değiştir"
+                current={model}
+                onSelect={changeModel}
+              />
+            </ActionPanel>
           }
         />
       )}

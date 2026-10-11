@@ -19,7 +19,9 @@ Raycast Pro olmadan Raycast'te yapay zekâ: soru sor, sohbet et, seçili metni d
 | **Çevir ve Değiştir** | Seçili metni pencere açmadan çevirip yerine yapıştırır. |
 | **Özetle** · **Açıkla** | Seçili metni (seçim yoksa panodakini) özetler veya açıklar. |
 
-Cevap ekranında: <kbd>↵</kbd> ön uygulamaya yapıştır, <kbd>⌘</kbd><kbd>↵</kbd> sohbette devam et, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> kopyala, <kbd>⌘</kbd><kbd>R</kbd> yeniden üret, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> başka modelle sor, <kbd>⌘</kbd><kbd>.</kbd> durdur.
+**Model seçimi:** Sohbet ve Çevir'de arama çubuğundaki menüden, cevap ekranında <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> ile. Seçilen model tüm komutlarda ortaktır ve hatırlanır; sohbetin ortasında değiştirince bağlam korunur.
+
+Cevap ekranında: <kbd>↵</kbd> ön uygulamaya yapıştır, <kbd>⌘</kbd><kbd>↵</kbd> sohbette devam et, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> kopyala, <kbd>⌘</kbd><kbd>R</kbd> yeniden üret, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> başka modelle sor (seçim kalıcı olur), <kbd>⌘</kbd><kbd>.</kbd> durdur.
 
 ## Gereksinimler
 
@@ -51,7 +53,8 @@ npm run dev   # eklenti Raycast'e eklendikten sonra Ctrl+C ile durdurabilirsin
 
 | Ayar | Açıklama |
 | --- | --- |
-| Model | Haiku 5.5 (varsayılan, en hızlı), Sonnet 5.5, Opus 5.5 |
+| Varsayılan Model | Haiku 5.5 (en hızlı), Sonnet 5.5, Opus 5.5, Fable 5.1. Uygulama içinde seçtiğin model bunun yerine geçer. |
+| Ek Modeller | Listeye eklenecek, virgülle ayrılmış model adları. `claude --model`'in kabul ettiği her ad olur: `opus`, `sonnet`, `claude-opus-5-5[1m]` vb. |
 | Claude CLI Yolu | Boşsa `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin` denenir |
 | Ek Talimat | Her isteğe eklenen kişisel talimat (üslup, hitap vb.) |
 

@@ -44,8 +44,3 @@ export function errorMarkdown(error: ClaudeError): string {
       return `## Hata\n\n\`\`\`\n${error.message}\n\`\`\``;
   }
 }
-
-export function modelLabel(model: string): string {
-  const m = model.match(/claude-(\w+)-(\d+)-(\d+)/);
-  return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}` : model;
-}

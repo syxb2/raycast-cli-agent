@@ -9,6 +9,8 @@ export interface Message {
   answer: string;
   createdAt: number;
   error?: string;
+  // Sohbet ortasinda model degisebilir; --resume ile baglam korunuyor.
+  model?: string;
 }
 
 export interface Conversation {

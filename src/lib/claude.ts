@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { currentModel } from "./models";
 
 export interface RateLimit {
   fiveHour?: { utilization: number; resetsAt: number };
@@ -42,10 +43,6 @@ const DEFAULT_SYSTEM_PROMPT = [
   "Gereksiz giriş cümlesi kurma, doğrudan cevaba geç.",
   "Gerekirse Markdown kullan; kod için dil belirten kod blokları kullan.",
 ].join(" ");
-
-export function defaultModel(): string {
-  return getPreferenceValues<Preferences>().model || "claude-haiku-5-5";
-}
 
 export function systemPrompt(base = DEFAULT_SYSTEM_PROMPT): string {
   const extra = getPreferenceValues<Preferences>().extraInstructions?.trim();
@@ -155,7 +152,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
   const args = [
     "-p",
     "--model",
-    opts.model ?? defaultModel(),
+    opts.model ?? currentModel(),
     // Kodlama ajani degil, sohbet yardimcisi: araclar, MCP, ayar dosyalari,
     // slash komutlari kapali. Acilis ~9 sn'den ~3 sn'ye iniyor (2026-10-11 olcumu).
     // --bare daha hizli ama OAuth/uyelik okumuyor, o yuzden kullanilamaz.

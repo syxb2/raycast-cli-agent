@@ -7,8 +7,13 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
-import { defaultModel } from "../lib/claude";
-import { errorMarkdown, modelLabel } from "../lib/format";
+import { errorMarkdown } from "../lib/format";
+import {
+  availableModels,
+  currentModel,
+  modelLabel,
+  setCurrentModel,
+} from "../lib/models";
 import {
   Conversation,
   Message,
@@ -18,7 +23,7 @@ import {
 } from "../lib/storage";
 import { useClaudeStream } from "../lib/useClaudeStream";
 import { HistoryView } from "./HistoryView";
-import { ErrorActions } from "./shared";
+import { ErrorActions, STOP_SHORTCUT } from "./shared";
 
 export function ChatView({
   initial,
@@ -29,7 +34,7 @@ export function ChatView({
 }) {
   const { push } = useNavigation();
   const [conversation, setConversation] = useState<Conversation>(
-    () => initial ?? newConversation(defaultModel()),
+    () => initial ?? newConversation(currentModel()),
   );
   const [input, setInput] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -49,6 +54,7 @@ export function ChatView({
       question: q,
       answer: "",
       createdAt: Date.now(),
+      model: conversation.model,
     };
     const base: Conversation = {
       ...conversation,
@@ -101,6 +107,11 @@ export function ChatView({
     setInput("");
   };
 
+  const changeModel = (model: string) => {
+    setCurrentModel(model);
+    setConversation((c) => ({ ...c, model }));
+  };
+
   const answerOf = (m: Message) => {
     if (m.id === pendingId) return stream.text || "_Claude düşünüyor…_";
     return m.error ?? m.answer;
@@ -127,6 +138,17 @@ export function ChatView({
       filtering={false}
       selectedItemId={selectedId}
       onSelectionChange={(id) => id && setSelectedId(id)}
+      searchBarAccessory={
+        <List.Dropdown
+          tooltip="Model"
+          value={conversation.model}
+          onChange={changeModel}
+        >
+          {availableModels().map((m) => (
+            <List.Dropdown.Item key={m.value} title={m.title} value={m.value} />
+          ))}
+        </List.Dropdown>
+      }
       actions={
         <ActionPanel>
           {sendAction}
@@ -160,7 +182,7 @@ export function ChatView({
               }
               detail={
                 <List.Item.Detail
-                  markdown={`**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n${answer}`}
+                  markdown={`**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n${answer}${m.model ? `\n\n---\n\n_${modelLabel(m.model)}_` : ""}`}
                 />
               }
               actions={
@@ -183,7 +205,7 @@ export function ChatView({
                     <Action
                       title="Durdur"
                       icon={Icon.Stop}
-                      shortcut={Keyboard.Shortcut.Common.Pin}
+                      shortcut={STOP_SHORTCUT}
                       onAction={stream.stop}
                     />
                   ) : null}

@@ -7,12 +7,12 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
-import { defaultModel } from "../lib/claude";
-import { errorMarkdown, modelLabel, rateLimitLines } from "../lib/format";
+import { errorMarkdown, rateLimitLines } from "../lib/format";
+import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useClaudeStream } from "../lib/useClaudeStream";
 import { ChatView } from "./ChatView";
-import { ErrorActions, MODELS } from "./shared";
+import { ErrorActions, ModelSubmenu, STOP_SHORTCUT } from "./shared";
 
 export interface AnswerViewProps {
   // Modele giden tam metin (secim + talimat olabilir).
@@ -25,7 +25,7 @@ export interface AnswerViewProps {
 
 export function AnswerView(props: AnswerViewProps) {
   const { push } = useNavigation();
-  const [model, setModel] = useState(defaultModel());
+  const [model, setModel] = useState(currentModel);
   // Her calistirma kendi oturumunu acar; "Sohbette Devam Et" bu oturumu --resume eder.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useClaudeStream();
@@ -44,6 +44,7 @@ export function AnswerView(props: AnswerViewProps) {
   }, [sessionId, model]);
 
   const regenerate = (m = model) => {
+    setCurrentModel(m);
     setModel(m);
     setSessionId(crypto.randomUUID());
   };
@@ -100,7 +101,7 @@ export function AnswerView(props: AnswerViewProps) {
             <Action
               title="Durdur"
               icon={Icon.Stop}
-              shortcut={Keyboard.Shortcut.Common.Pin}
+              shortcut={STOP_SHORTCUT}
               onAction={stream.stop}
             />
           ) : null}
@@ -131,19 +132,11 @@ export function AnswerView(props: AnswerViewProps) {
                 shortcut={Keyboard.Shortcut.Common.Refresh}
                 onAction={() => regenerate()}
               />
-              <ActionPanel.Submenu
+              <ModelSubmenu
                 title="Başka Modelle Sor"
-                icon={Icon.Switch}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
-              >
-                {MODELS.filter((m) => m.value !== model).map((m) => (
-                  <Action
-                    key={m.value}
-                    title={m.title}
-                    onAction={() => regenerate(m.value)}
-                  />
-                ))}
-              </ActionPanel.Submenu>
+                current={model}
+                onSelect={regenerate}
+              />
             </>
           ) : null}
         </ActionPanel>

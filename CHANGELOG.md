@@ -1,5 +1,12 @@
 # CLI Assistant Changelog
 
+## [Model Seçimi] - 2026-10-11
+
+- Seçilen model tüm komutlarda ortak ve kalıcı; Sohbet ve Çevir'de menüden, cevap ekranında ⌘⇧R ile değiştirilir
+- Sohbet ortasında model değiştirilebilir, bağlam korunur; her cevabın altında hangi modelin yazdığı görünür
+- Fable 5.1 eklendi; "Ek Modeller" ayarıyla `claude --model`'in kabul ettiği her ad eklenebilir
+- Durdur kısayolu tekrar ⌘. oldu
+
 ## [İlk Sürüm] - 2026-10-11
 
 - Soru Sor, Sohbet ve Sohbet Geçmişi komutları

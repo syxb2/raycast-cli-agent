@@ -108,8 +108,8 @@
   "preferences": [
     {
       "name": "model",
-      "title": "Model",
-      "description": "Varsayılan model.",
+      "title": "Varsayılan Model",
+      "description": "Henüz model seçmediysen kullanılır. Sohbet ve Çevir'deki menüden veya cevap ekranında ⌘⇧R ile seçtiğin model hatırlanır.",
       "type": "dropdown",
       "required": false,
       "default": "claude-haiku-5-5",
@@ -125,8 +125,20 @@
         {
           "title": "Opus 5.5",
           "value": "claude-opus-5-5"
+        },
+        {
+          "title": "Fable 5.1",
+          "value": "claude-fable-5-1"
         }
       ]
+    },
+    {
+      "name": "customModels",
+      "title": "Ek Modeller",
+      "description": "Listeye eklenecek model adları, virgülle ayrılmış (ör. opus, claude-opus-5-5[1m]). Claude Code'un --model seçeneğinin kabul ettiği her ad olur.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "opus, claude-opus-5-5[1m]"
     },
     {
       "name": "claudePath",
