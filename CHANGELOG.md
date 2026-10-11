@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [İkon Düzeltmesi] - 2026-10-11
+
+- İkon dosyası yeniden adlandırıldı; Raycast'in önbelleğindeki eski ikonun görünmesi engellendi
+
 ## [Tek Satırlık Kurulum] - 2026-10-11
 
 - `install.sh`: Node/npm/git olmadan son release'i indirip kurar ve günceller

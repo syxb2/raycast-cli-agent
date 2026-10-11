@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.png" width="128" alt="CLI Assistant"></p>
+<p align="center"><img src="assets/extension-icon.png" width="128" alt="CLI Assistant"></p>
 
 # CLI Assistant
 

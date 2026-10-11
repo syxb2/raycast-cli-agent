@@ -3,7 +3,7 @@
   "name": "claude-cli",
   "title": "CLI Assistant",
   "description": "Raycast Pro olmadan, kendi Claude üyeliğinle çalışan Claude Code CLI üzerinden soru sor, sohbet et ve seçili metni dönüştür.",
-  "icon": "icon.png",
+  "icon": "extension-icon.png",
   "author": "umitaltintas",
   "categories": [
     "Productivity",
