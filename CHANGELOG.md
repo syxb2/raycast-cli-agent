@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Codex Models After Update] - 2026-10-11
+
+- The model list is refreshed right away when an installed CLI has no models in the cached list, so Codex models show up after updating instead of a day later
+
 ## [Codex Support] - 2026-10-11
 
 - Codex CLI as a second provider, signed in with your ChatGPT plan; also found inside the ChatGPT app

@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { useCallback, useEffect, useState } from "react";
 import { childEnv, resolveClaudeBinary, workDir } from "./claude";
-import { fetchCodexModels } from "./codex";
-import { providerOf } from "./provider";
+import { fetchCodexModels, resolveCodexBinary } from "./codex";
+import { Provider, providerOf } from "./provider";
 import {
   availableModels,
   loadCatalog,
@@ -118,13 +118,29 @@ function normalize(models: CliModel[]): ModelOption[] {
   return out;
 }
 
+// A cache written before a CLI was installed (or before this extension
+// supported it) would otherwise hide that CLI's models for up to a day.
+function missesInstalledProvider(catalog: ModelCatalog): boolean {
+  const has = (p: Provider) =>
+    catalog.models.some((m) => providerOf(m.value) === p);
+  return (
+    (Boolean(resolveClaudeBinary()) && !has("claude")) ||
+    (Boolean(resolveCodexBinary()) && !has("codex"))
+  );
+}
+
 // Both CLIs are asked in parallel; a missing or failing one just contributes
 // no models. Claude models come first.
 export async function refreshCatalog(
   force = false,
 ): Promise<ModelCatalog | undefined> {
   const cached = loadCatalog();
-  if (!force && cached && Date.now() - cached.fetchedAt < MAX_AGE_MS)
+  if (
+    !force &&
+    cached &&
+    Date.now() - cached.fetchedAt < MAX_AGE_MS &&
+    !missesInstalledProvider(cached)
+  )
     return cached;
   const [claude, codex] = await Promise.allSettled([
     resolveClaudeBinary() ? fetchCliModels() : Promise.resolve([]),
