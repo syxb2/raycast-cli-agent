@@ -1,0 +1,162 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "claude-cli",
+  "title": "CLI Assistant",
+  "description": "Raycast Pro olmadan, kendi Claude üyeliğinle çalışan Claude Code CLI üzerinden soru sor, sohbet et ve seçili metni dönüştür.",
+  "icon": "icon.png",
+  "author": "umitaltintas",
+  "categories": [
+    "Productivity",
+    "Developer Tools"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "ask",
+      "title": "Soru Sor",
+      "subtitle": "CLI Assistant",
+      "description": "Soru sor, cevap akarak gelsin. Fallback komutu olarak eklenebilir.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "prompt",
+          "type": "text",
+          "placeholder": "Soru",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "title": "Sohbet",
+      "subtitle": "CLI Assistant",
+      "description": "Devam soruları sorabileceğin sohbet.",
+      "mode": "view"
+    },
+    {
+      "name": "history",
+      "title": "Sohbet Geçmişi",
+      "subtitle": "CLI Assistant",
+      "description": "Önceki sohbetleri aç veya sil.",
+      "mode": "view"
+    },
+    {
+      "name": "ask-selection",
+      "title": "Seçim Hakkında Sor",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metin hakkında soru sor.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "question",
+          "type": "text",
+          "placeholder": "Soru",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "fix-grammar",
+      "title": "Yazımı Düzelt",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metindeki yazım ve dilbilgisi hatalarını düzeltip yerine yapıştırır.",
+      "mode": "no-view"
+    },
+    {
+      "name": "improve-writing",
+      "title": "Metni İyileştir",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metni daha akıcı hale getirip yerine yapıştırır.",
+      "mode": "no-view"
+    },
+    {
+      "name": "make-shorter",
+      "title": "Metni Kısalt",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metni kısaltıp yerine yapıştırır.",
+      "mode": "no-view"
+    },
+    {
+      "name": "translate",
+      "title": "Çevir",
+      "subtitle": "CLI Assistant",
+      "description": "Yazarken çevirir; seçili metin kendiliğinden gelir. Hedef dil hatırlanır.",
+      "mode": "view"
+    },
+    {
+      "name": "translate-replace",
+      "title": "Çevir ve Değiştir",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metni son kullanılan dile çevirip yerine yapıştırır.",
+      "mode": "no-view"
+    },
+    {
+      "name": "summarize",
+      "title": "Özetle",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metni özetler.",
+      "mode": "view"
+    },
+    {
+      "name": "explain",
+      "title": "Açıkla",
+      "subtitle": "CLI Assistant",
+      "description": "Seçili metni veya kodu açıklar.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "model",
+      "title": "Model",
+      "description": "Varsayılan model.",
+      "type": "dropdown",
+      "required": false,
+      "default": "claude-haiku-5-5",
+      "data": [
+        {
+          "title": "Haiku 5.5 (hızlı)",
+          "value": "claude-haiku-5-5"
+        },
+        {
+          "title": "Sonnet 5.5",
+          "value": "claude-sonnet-5-5"
+        },
+        {
+          "title": "Opus 5.5",
+          "value": "claude-opus-5-5"
+        }
+      ]
+    },
+    {
+      "name": "claudePath",
+      "title": "Claude CLI Yolu",
+      "description": "Boş bırakılırsa ~/.local/bin, /opt/homebrew/bin ve /usr/local/bin denenir.",
+      "type": "textfield",
+      "required": false
+    },
+    {
+      "name": "extraInstructions",
+      "title": "Ek Talimat",
+      "description": "Her isteğin sistem talimatına eklenir (ör. hitap şekli, üslup).",
+      "type": "textfield",
+      "required": false
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^2.7.3"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint"
+  }
+}
