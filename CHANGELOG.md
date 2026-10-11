@@ -1,5 +1,10 @@
 # CLI Assistant Changelog
 
+## [Tek Satırlık Kurulum] - 2026-10-11
+
+- `install.sh`: Node/npm/git olmadan son release'i indirip kurar ve günceller
+- Her `v*` etiketinde GitHub Actions hazır derlemeyi release'e ekler
+
 ## [Model Listesi CLI'den] - 2026-10-11
 
 - Model listesi sabit değil; Claude Code CLI'den planına göre alınır, önbelleğe yazılır ve günde bir yenilenir

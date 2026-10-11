@@ -1,0 +1,37 @@
+# v* etiketi gonderilince eklentiyi derleyip install.sh'in indirdigi
+# cli-assistant.tar.gz paketiyle bir GitHub Release olusturur.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: |
+          npx ray build -e dist -o dist -I
+          rm -f dist/*.map
+          echo "${GITHUB_REF_NAME}" > dist/VERSION
+          tar -czf cli-assistant.tar.gz -C dist .
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" cli-assistant.tar.gz \
+            --title "$GITHUB_REF_NAME" --generate-notes

@@ -35,7 +35,18 @@ Cevap ekranında: <kbd>↵</kbd> ön uygulamaya yapıştır, <kbd>⌘</kbd><kbd>
 
 ## Kurulum
 
-Eklenti Raycast Store'da değil; kaynaktan kurulur:
+Terminale yapıştır:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/umitaltintas/raycast-cli-assistant/main/install.sh | bash
+```
+
+Node, npm veya git gerekmez. Betik son [release](https://github.com/umitaltintas/raycast-cli-assistant/releases/latest)'teki hazır derlemeyi (~60 KB) indirir, Raycast'in eklenti klasörüne koyar ve Raycast'e kaydettirir. Claude Code'un kurulu ve giriş yapılmış olduğunu da kontrol eder. **Güncellemek için aynı komutu tekrar çalıştır;** sohbet geçmişi ve ayarlar korunur. Kaldırmak için Raycast'te komutlardan birinde <kbd>⌘</kbd><kbd>K</kbd> → *Uninstall Extension*.
+
+> Mağaza dışı eklentiler Raycast'te "geliştirme eklentisi" olarak görünür ve Raycast hesabıyla giriş yapılmış olmasını gerektirebilir. Betik, `ray develop`'un Raycast'e gönderdiği kayıt bildiriminin (`raycast://cli/…`) aynısını kullanır; bu Raycast'in belgelenmiş bir arayüzü olmadığından ileride değişirse aşağıdaki kaynaktan kurulum her zaman çalışır.
+
+<details>
+<summary>Kaynaktan kurulum (geliştirmek istersen)</summary>
 
 ```bash
 git clone https://github.com/umitaltintas/raycast-cli-assistant.git
@@ -43,6 +54,10 @@ cd raycast-cli-assistant
 npm install
 npm run dev   # eklenti Raycast'e eklendikten sonra Ctrl+C ile durdurabilirsin
 ```
+
+Node 22.22.2 veya üstü gerekir.
+
+</details>
 
 İpuçları:
 
