@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Ask AI from Spotlight] - 2026-10-12
+
+- `install.sh --spotlight` creates an Ask AI app that Spotlight finds; it answers with the model chosen in the extension, through Claude Code or Codex
+
 ## [Leaner Codex Requests] - 2026-10-12
 
 - Codex requests use about a quarter of the tokens: the assistant prompt replaces Codex's coding-agent prompt, and skills, sandbox rules, apps, plugins, web search and other agent tools are left out

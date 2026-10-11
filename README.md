@@ -44,6 +44,16 @@ Requires Node 22.22.2 or newer.
 
 </details>
 
+### Spotlight (optional)
+
+Add `--spotlight` to also get an **Ask AI** app that Spotlight finds:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/umitaltintas/raycast-cli-assistant/main/install.sh | bash -s -- --spotlight
+```
+
+Press <kbd>⌘</kbd><kbd>Space</kbd>, type "Ask AI", ask a question and the answer shows in a dialog with *Copy* and *Ask Another*. It uses the model last chosen in the extension and doesn't need Raycast to be open. Running the installer again keeps it up to date; to remove it, delete `~/Applications/Ask AI.app`. (A Shortcut would be nicer, but signing one needs an iCloud account.)
+
 ### Requirements
 
 - Raycast v2 on macOS
