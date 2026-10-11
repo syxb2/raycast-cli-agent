@@ -5,7 +5,8 @@ export interface SourceText {
   from: "selection" | "clipboard";
 }
 
-// getSelectedText secim yoksa reddeder; okuma komutlarinda panoya dusulur.
+// getSelectedText rejects when nothing is selected; read-only commands fall
+// back to the clipboard.
 export async function readSourceText({
   allowClipboard,
 }: {
@@ -15,7 +16,7 @@ export async function readSourceText({
     const text = (await getSelectedText()).trim();
     if (text) return { text, from: "selection" };
   } catch {
-    // secim yok
+    // nothing selected
   }
   if (!allowClipboard) return undefined;
   const clip = (await Clipboard.readText())?.trim();

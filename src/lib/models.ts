@@ -6,7 +6,7 @@ export interface ModelOption {
   title: string;
   value: string;
   description?: string;
-  // Takma adin (opus, haiku) su an karsilik geldigi tam model kimligi.
+  // Full model id an alias (opus, haiku) currently resolves to.
   resolvedModel?: string;
 }
 
@@ -15,8 +15,8 @@ export interface ModelCatalog {
   models: ModelOption[];
 }
 
-// CLI'ye ulasilamazsa kullanilan yedek liste. Takma adlar bilerek tercih
-// edildi: yeni bir surum ciktiginda CLI onlari kendiliginden yeniye cozer.
+// Used when the CLI is unreachable. Aliases on purpose: the CLI resolves them
+// to the newest version automatically.
 export const FALLBACK_MODELS: ModelOption[] = [
   { title: "Haiku", value: "haiku" },
   { title: "Sonnet", value: "sonnet" },
@@ -29,14 +29,14 @@ function supportFile(name: string): string {
   return join(environment.supportPath, name);
 }
 
-// Son secilen model tum komutlarda ortak ve kalici. LocalStorage async oldugu
-// icin senkron okunabilen kucuk bir dosyada tutuluyor.
+// The last chosen model is shared by all commands and persists. Stored in a
+// small file because LocalStorage is async and this is read synchronously.
 export function currentModel(): string {
   try {
     const saved = readFileSync(supportFile("current-model"), "utf8").trim();
     if (saved) return saved;
   } catch {
-    // henuz secilmemis
+    // nothing chosen yet
   }
   return getPreferenceValues<Preferences>().model || "haiku";
 }
@@ -57,7 +57,7 @@ export function saveCatalog(catalog: ModelCatalog): void {
   writeFileSync(supportFile("models.json"), JSON.stringify(catalog));
 }
 
-// "opus" ile "claude-opus-5-5" ayni modeli gosterebilir; ikisi de "secili" sayilir.
+// "opus" and "claude-opus-5-5" can be the same model; both count as selected.
 export function sameModel(a: string, b: string): boolean {
   if (a === b) return true;
   const models = loadCatalog()?.models ?? [];
@@ -75,7 +75,7 @@ export function modelLabel(model: string): string {
   return m[4] ? `${name} (1M)` : name;
 }
 
-// CLI'nin listesi (yoksa yedek) + ayarlardaki ek modeller + listede yoksa su anki model.
+// CLI list (or fallback) + Extra Models preference + the current model if missing.
 export function availableModels(): ModelOption[] {
   const list = [...(loadCatalog()?.models ?? FALLBACK_MODELS)];
   const custom = (getPreferenceValues<Preferences>().customModels ?? "")
@@ -90,7 +90,7 @@ export function availableModels(): ModelOption[] {
   return list;
 }
 
-// Acilir menude secili gorunmesi icin su anki modelin listedeki karsiligi.
+// The list entry matching the current model, so dropdowns show it as selected.
 export function matchingValue(model: string, list: ModelOption[]): string {
   return list.find((m) => sameModel(m.value, model))?.value ?? model;
 }

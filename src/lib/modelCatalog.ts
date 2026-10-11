@@ -20,12 +20,12 @@ interface CliModel {
   description?: string;
 }
 
-// Claude Code'un kontrol protokolu (Agent SDK'nin supportedModels()'i de bunu
-// kullanir): stream-json girdisine "initialize" istegi yazinca cevapta hesabin
-// planina gore kullanilabilir modeller gelir. Model cagrisi yapilmaz, ~2 sn.
+// Claude Code's control protocol (also behind the Agent SDK's
+// supportedModels()): an "initialize" request on stream-json input returns the
+// models available on the account's plan. No model call, ~1-2 s.
 export function fetchCliModels(): Promise<ModelOption[]> {
   const bin = resolveClaudeBinary();
-  if (!bin) return Promise.reject(new Error("Claude Code CLI bulunamadı."));
+  if (!bin) return Promise.reject(new Error("Claude Code CLI not found."));
 
   const args = [
     "-p",
@@ -58,7 +58,7 @@ export function fetchCliModels(): Promise<ModelOption[]> {
       else resolve(models!);
     };
     const timer = setTimeout(
-      () => finish(new Error("Model listesi zaman aşımına uğradı.")),
+      () => finish(new Error("Timed out fetching the model list.")),
       TIMEOUT_MS,
     );
 
@@ -75,17 +75,17 @@ export function fetchCliModels(): Promise<ModelOption[]> {
       if (event.type !== "control_response") return;
       const models = event.response?.response?.models;
       if (!Array.isArray(models) || models.length === 0) {
-        finish(new Error("CLI model listesi döndürmedi."));
+        finish(new Error("The CLI returned no model list."));
         return;
       }
       finish(undefined, normalize(models));
     });
     child.on("error", (e) => finish(e));
     child.on("close", () =>
-      finish(new Error("CLI model listesi vermeden kapandı.")),
+      finish(new Error("The CLI exited before returning a model list.")),
     );
 
-    // stdin acik kalmali: kapanirsa CLI cevabi yazmadan cikabiliyor.
+    // Keep stdin open: closing it can make the CLI exit before replying.
     child.stdin.write(
       JSON.stringify({
         type: "control_request",
@@ -96,8 +96,8 @@ export function fetchCliModels(): Promise<ModelOption[]> {
   });
 }
 
-// "default" yalnizca baska bir modelin takma adi; ayni modele cozulen
-// girdilerden ilki (takma ad) tutulur.
+// "default" is only an alias of another model; among entries resolving to the
+// same model the first one (the alias) is kept.
 function normalize(models: CliModel[]): ModelOption[] {
   const seen = new Set<string>();
   const out: ModelOption[] = [];
@@ -128,7 +128,7 @@ export async function refreshCatalog(
   return catalog;
 }
 
-// Onbellekteki liste hemen gosterilir; eskiyse arka planda yenilenir.
+// The cached list shows immediately and is refreshed in the background when stale.
 export function useModels() {
   const [models, setModels] = useState<ModelOption[]>(availableModels);
   const [isRefreshing, setRefreshing] = useState(false);
@@ -139,7 +139,7 @@ export function useModels() {
       await refreshCatalog(force);
       setModels(availableModels());
     } catch {
-      // CLI'ye ulasilamazsa onbellek/yedek liste kalir
+      // keep the cached/fallback list if the CLI is unreachable
     } finally {
       setRefreshing(false);
     }

@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "claude-cli",
   "title": "CLI Assistant",
-  "description": "Raycast Pro olmadan, kendi Claude üyeliğinle çalışan Claude Code CLI üzerinden soru sor, sohbet et ve seçili metni dönüştür.",
+  "description": "Ask, chat, translate and rewrite selected text without Raycast Pro, using the Claude Code CLI signed in with your own Claude subscription.",
   "icon": "extension-icon.png",
   "author": "umitaltintas",
   "categories": [
@@ -13,150 +13,371 @@
   "commands": [
     {
       "name": "ask",
-      "title": "Soru Sor",
+      "title": "Ask AI",
       "subtitle": "CLI Assistant",
-      "description": "Soru sor, cevap akarak gelsin. Fallback komutu olarak eklenebilir.",
+      "description": "Ask a question and get a streamed answer. Works as a fallback command.",
       "mode": "view",
       "arguments": [
         {
           "name": "prompt",
           "type": "text",
-          "placeholder": "Soru",
+          "placeholder": "Question",
           "required": false
         }
       ]
     },
     {
       "name": "chat",
-      "title": "Sohbet",
+      "title": "Chat",
       "subtitle": "CLI Assistant",
-      "description": "Devam soruları sorabileceğin sohbet.",
+      "description": "Chat with follow-up questions.",
       "mode": "view"
     },
     {
       "name": "history",
-      "title": "Sohbet Geçmişi",
+      "title": "Chat History",
       "subtitle": "CLI Assistant",
-      "description": "Önceki sohbetleri aç veya sil.",
+      "description": "Open or delete previous chats.",
       "mode": "view"
     },
     {
       "name": "ask-selection",
-      "title": "Seçim Hakkında Sor",
+      "title": "Ask About Selection",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metin hakkında soru sor.",
+      "description": "Ask a question about the selected text.",
       "mode": "view",
       "arguments": [
         {
           "name": "question",
           "type": "text",
-          "placeholder": "Soru",
+          "placeholder": "Question",
           "required": false
         }
       ]
     },
     {
       "name": "fix-grammar",
-      "title": "Yazımı Düzelt",
+      "title": "Fix Spelling and Grammar",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metindeki yazım ve dilbilgisi hatalarını düzeltip yerine yapıştırır.",
+      "description": "Fix spelling and grammar in the selected text and paste it back.",
       "mode": "no-view"
     },
     {
       "name": "improve-writing",
-      "title": "Metni İyileştir",
+      "title": "Improve Writing",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metni daha akıcı hale getirip yerine yapıştırır.",
+      "description": "Make the selected text clearer and paste it back.",
       "mode": "no-view"
     },
     {
       "name": "make-shorter",
-      "title": "Metni Kısalt",
+      "title": "Make Shorter",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metni kısaltıp yerine yapıştırır.",
+      "description": "Shorten the selected text and paste it back.",
       "mode": "no-view"
     },
     {
       "name": "translate",
-      "title": "Çevir",
+      "title": "Translate",
       "subtitle": "CLI Assistant",
-      "description": "Yazarken çevirir; seçili metin kendiliğinden gelir. Hedef dil hatırlanır.",
+      "description": "Translate as you type; selected text is filled in. The target language is remembered.",
       "mode": "view"
     },
     {
       "name": "translate-replace",
-      "title": "Çevir ve Değiştir",
+      "title": "Translate and Replace",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metni son kullanılan dile çevirip yerine yapıştırır.",
+      "description": "Translate the selected text into the last used language and paste it back.",
       "mode": "no-view"
     },
     {
       "name": "summarize",
-      "title": "Özetle",
+      "title": "Summarize",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metni özetler.",
+      "description": "Summarize the selected text.",
       "mode": "view"
     },
     {
       "name": "explain",
-      "title": "Açıkla",
+      "title": "Explain",
       "subtitle": "CLI Assistant",
-      "description": "Seçili metni veya kodu açıklar.",
+      "description": "Explain the selected text or code.",
       "mode": "view"
     }
   ],
   "preferences": [
     {
       "name": "model",
-      "title": "Varsayılan Model",
-      "description": "Henüz model seçmediysen kullanılır. Takma adlar her zaman ailenin en yeni sürümüne gider. Uygulama içinde (Sohbet/Çevir menüsü, cevap ekranında ⌘⇧R) seçtiğin model bunun yerine geçer; o listeyi CLI'den alıyoruz.",
+      "title": "Default Model",
+      "description": "Used until you pick a model in the extension. Aliases always resolve to the newest version. The full list (from the Claude Code CLI) is in the model menus: Chat, Translate, and ⌘⇧R on answers.",
       "type": "dropdown",
       "required": false,
       "default": "haiku",
       "data": [
         {
-          "title": "Haiku (en yeni, hızlı)",
+          "title": "Haiku (newest, fastest)",
           "value": "haiku"
         },
         {
-          "title": "Sonnet (en yeni)",
+          "title": "Sonnet (newest)",
           "value": "sonnet"
         },
         {
-          "title": "Opus (en yeni)",
+          "title": "Opus (newest)",
           "value": "opus"
         },
         {
-          "title": "Fable (en yeni)",
+          "title": "Fable (newest)",
           "value": "fable"
         }
       ]
     },
     {
+      "name": "primaryLanguage",
+      "title": "Primary Language",
+      "description": "Your main language. Summaries and explanations of selected text are written in it, and Translate's Auto mode translates into it.",
+      "type": "dropdown",
+      "required": false,
+      "default": "English",
+      "data": [
+        {
+          "title": "English",
+          "value": "English"
+        },
+        {
+          "title": "Arabic",
+          "value": "Arabic"
+        },
+        {
+          "title": "Chinese",
+          "value": "Chinese"
+        },
+        {
+          "title": "Czech",
+          "value": "Czech"
+        },
+        {
+          "title": "Dutch",
+          "value": "Dutch"
+        },
+        {
+          "title": "French",
+          "value": "French"
+        },
+        {
+          "title": "German",
+          "value": "German"
+        },
+        {
+          "title": "Greek",
+          "value": "Greek"
+        },
+        {
+          "title": "Hebrew",
+          "value": "Hebrew"
+        },
+        {
+          "title": "Hindi",
+          "value": "Hindi"
+        },
+        {
+          "title": "Hungarian",
+          "value": "Hungarian"
+        },
+        {
+          "title": "Indonesian",
+          "value": "Indonesian"
+        },
+        {
+          "title": "Italian",
+          "value": "Italian"
+        },
+        {
+          "title": "Japanese",
+          "value": "Japanese"
+        },
+        {
+          "title": "Korean",
+          "value": "Korean"
+        },
+        {
+          "title": "Persian",
+          "value": "Persian"
+        },
+        {
+          "title": "Polish",
+          "value": "Polish"
+        },
+        {
+          "title": "Portuguese",
+          "value": "Portuguese"
+        },
+        {
+          "title": "Romanian",
+          "value": "Romanian"
+        },
+        {
+          "title": "Russian",
+          "value": "Russian"
+        },
+        {
+          "title": "Spanish",
+          "value": "Spanish"
+        },
+        {
+          "title": "Swedish",
+          "value": "Swedish"
+        },
+        {
+          "title": "Turkish",
+          "value": "Turkish"
+        },
+        {
+          "title": "Ukrainian",
+          "value": "Ukrainian"
+        },
+        {
+          "title": "Vietnamese",
+          "value": "Vietnamese"
+        }
+      ]
+    },
+    {
+      "name": "secondaryLanguage",
+      "title": "Secondary Language",
+      "description": "Translate's Auto mode translates text that is already in your primary language into this one.",
+      "type": "dropdown",
+      "required": false,
+      "default": "English",
+      "data": [
+        {
+          "title": "English",
+          "value": "English"
+        },
+        {
+          "title": "Arabic",
+          "value": "Arabic"
+        },
+        {
+          "title": "Chinese",
+          "value": "Chinese"
+        },
+        {
+          "title": "Czech",
+          "value": "Czech"
+        },
+        {
+          "title": "Dutch",
+          "value": "Dutch"
+        },
+        {
+          "title": "French",
+          "value": "French"
+        },
+        {
+          "title": "German",
+          "value": "German"
+        },
+        {
+          "title": "Greek",
+          "value": "Greek"
+        },
+        {
+          "title": "Hebrew",
+          "value": "Hebrew"
+        },
+        {
+          "title": "Hindi",
+          "value": "Hindi"
+        },
+        {
+          "title": "Hungarian",
+          "value": "Hungarian"
+        },
+        {
+          "title": "Indonesian",
+          "value": "Indonesian"
+        },
+        {
+          "title": "Italian",
+          "value": "Italian"
+        },
+        {
+          "title": "Japanese",
+          "value": "Japanese"
+        },
+        {
+          "title": "Korean",
+          "value": "Korean"
+        },
+        {
+          "title": "Persian",
+          "value": "Persian"
+        },
+        {
+          "title": "Polish",
+          "value": "Polish"
+        },
+        {
+          "title": "Portuguese",
+          "value": "Portuguese"
+        },
+        {
+          "title": "Romanian",
+          "value": "Romanian"
+        },
+        {
+          "title": "Russian",
+          "value": "Russian"
+        },
+        {
+          "title": "Spanish",
+          "value": "Spanish"
+        },
+        {
+          "title": "Swedish",
+          "value": "Swedish"
+        },
+        {
+          "title": "Turkish",
+          "value": "Turkish"
+        },
+        {
+          "title": "Ukrainian",
+          "value": "Ukrainian"
+        },
+        {
+          "title": "Vietnamese",
+          "value": "Vietnamese"
+        }
+      ]
+    },
+    {
       "name": "customModels",
-      "title": "Ek Modeller",
-      "description": "Planının listesinde görünmeyen modeller için, virgülle ayrılmış (ör. claude-opus-5-5[1m]). Liste zaten Claude Code CLI'den otomatik geliyor.",
+      "title": "Extra Models",
+      "description": "Comma-separated models missing from your plan's list (e.g. claude-opus-5-5[1m]). The list itself comes from the Claude Code CLI automatically.",
       "type": "textfield",
       "required": false,
       "placeholder": "opus, claude-opus-5-5[1m]"
     },
     {
       "name": "claudePath",
-      "title": "Claude CLI Yolu",
-      "description": "Boş bırakılırsa ~/.local/bin, /opt/homebrew/bin ve /usr/local/bin denenir.",
+      "title": "Claude CLI Path",
+      "description": "Leave empty to try ~/.local/bin, /opt/homebrew/bin and /usr/local/bin.",
       "type": "textfield",
       "required": false
     },
     {
       "name": "extraInstructions",
-      "title": "Ek Talimat",
-      "description": "Her isteğin sistem talimatına eklenir (ör. hitap şekli, üslup).",
+      "title": "Extra Instructions",
+      "description": "Appended to the system prompt of every request (tone, how to address you, etc.).",
       "type": "textfield",
       "required": false
     }
   ],
   "dependencies": {
-    "@raycast/api": "^2.7.3"
+    "@raycast/api": "^2.7.3",
+    "franc-min": "^6.2.0"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.0.4",

@@ -1,29 +1,36 @@
 # CLI Assistant Changelog
 
-## [İkon Düzeltmesi] - 2026-10-11
+## [English UI and Language Preferences] - 2026-10-11
 
-- İkon dosyası yeniden adlandırıldı; Raycast'in önbelleğindeki eski ikonun görünmesi engellendi
+- The whole extension, README and install script are in English
+- New **Primary Language** and **Secondary Language** preferences (25 languages). Summaries, explanations and answers about selected text use the primary language; Translate's Auto mode translates between the two
+- Language detection with franc instead of a Turkish-only word list; longer text is also checked for a third language
+- Translations are sent with explicit source and target languages and the text in tags, which fixed untranslated and instruction-following outputs
+- A translation in the wrong language is retried once with Sonnet
 
-## [Tek Satırlık Kurulum] - 2026-10-11
+## [Icon Fix] - 2026-10-11
 
-- `install.sh`: Node/npm/git olmadan son release'i indirip kurar ve günceller
-- Her `v*` etiketinde GitHub Actions hazır derlemeyi release'e ekler
+- Renamed the icon file so Raycast no longer shows a stale cached icon
 
-## [Model Listesi CLI'den] - 2026-10-11
+## [One-Line Install] - 2026-10-11
 
-- Model listesi sabit değil; Claude Code CLI'den planına göre alınır, önbelleğe yazılır ve günde bir yenilenir
-- Menülere "Model Listesini Yenile" eklendi
-- Varsayılan model ayarı takma adlara (haiku, sonnet, opus, fable) geçti; her zaman en yeni sürüm kullanılır
+- `install.sh` installs and updates the latest release without Node, npm or git
+- GitHub Actions attaches a prebuilt package to every `v*` tag
 
-## [Model Seçimi] - 2026-10-11
+## [Model List from the CLI] - 2026-10-11
 
-- Seçilen model tüm komutlarda ortak ve kalıcı; Sohbet ve Çevir'de menüden, cevap ekranında ⌘⇧R ile değiştirilir
-- Sohbet ortasında model değiştirilebilir, bağlam korunur; her cevabın altında hangi modelin yazdığı görünür
-- Fable 5.1 eklendi; "Ek Modeller" ayarıyla `claude --model`'in kabul ettiği her ad eklenebilir
-- Durdur kısayolu tekrar ⌘. oldu
+- The model list comes from the Claude Code CLI for your plan, is cached and refreshed daily
+- "Refresh Model List" in the model menus
+- The Default Model preference uses aliases (haiku, sonnet, opus, fable), always the newest version
 
-## [İlk Sürüm] - 2026-10-11
+## [Model Selection] - 2026-10-11
 
-- Soru Sor, Sohbet ve Sohbet Geçmişi komutları
-- Seçili metinle çalışan komutlar: Seçim Hakkında Sor, Yazımı Düzelt, Metni İyileştir, Metni Kısalt, Çevir, Çevir ve Değiştir, Özetle, Açıkla
-- Akarak gelen cevaplar, devam soruları, 5 saatlik ve haftalık kota gösterimi
+- The chosen model is shared by all commands and remembered; change it from the menus in Chat and Translate or with ⌘⇧R on an answer
+- The model can change mid-chat without losing context; every answer shows which model wrote it
+- Extra Models preference for any name `claude --model` accepts
+
+## [Initial Version] - 2026-10-11
+
+- Ask, Chat and Chat History
+- Selection commands: Ask About Selection, Fix Spelling and Grammar, Improve Writing, Make Shorter, Translate, Translate and Replace, Summarize, Explain
+- Streamed answers, follow-up questions, 5-hour and weekly usage display

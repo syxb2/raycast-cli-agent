@@ -15,7 +15,7 @@ export interface RunOptions {
   prompt: string;
   model?: string;
   systemPrompt?: string;
-  // Verilirse cok turlu sohbet: oturum diskte yoksa --session-id, varsa --resume.
+  // Multi-turn chat: --session-id if the session is not on disk yet, else --resume.
   sessionId?: string;
   signal?: AbortSignal;
   onText?: (fullText: string) => void;
@@ -38,18 +38,20 @@ export interface ClaudeError {
 }
 
 const DEFAULT_SYSTEM_PROMPT = [
-  "Sen Raycast içinden çağrılan kısa ve net bir yardımcısın.",
-  "Kullanıcının yazdığı dilde cevap ver.",
-  "Gereksiz giriş cümlesi kurma, doğrudan cevaba geç.",
-  "Gerekirse Markdown kullan; kod için dil belirten kod blokları kullan.",
+  "You are a concise assistant invoked from Raycast.",
+  "Reply in the language the user writes in.",
+  "Skip filler and preambles; get straight to the answer.",
+  "Use Markdown when helpful; use fenced code blocks with a language tag for code.",
 ].join(" ");
 
 export function systemPrompt(base = DEFAULT_SYSTEM_PROMPT): string {
   const extra = getPreferenceValues<Preferences>().extraInstructions?.trim();
-  return extra ? `${base}\n\nKullanıcının ek talimatı: ${extra}` : base;
+  return extra
+    ? `${base}\n\nAdditional instructions from the user: ${extra}`
+    : base;
 }
 
-// Raycast'in Node sureci shell PATH'ini miras almaz; mutlak yol sart.
+// Raycast's Node process does not inherit the shell PATH; absolute paths only.
 export function resolveClaudeBinary(): string | undefined {
   const custom = getPreferenceValues<Preferences>().claudePath?.trim();
   const candidates = custom
@@ -62,8 +64,8 @@ export function resolveClaudeBinary(): string | undefined {
   return candidates.find((p) => existsSync(p));
 }
 
-// --setting-sources "" kullanici settings.json'unu da atladigi icin oradaki
-// proxy ayarlari (claude-proxy on/off) buradan okunup cocuk surece verilir.
+// --setting-sources "" also skips the user's settings.json, so its proxy
+// variables are read here and passed to the child process.
 function proxyEnv(): Record<string, string> {
   try {
     const settings = JSON.parse(
@@ -81,13 +83,13 @@ function proxyEnv(): Record<string, string> {
 
 export function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...proxyEnv() };
-  // Raycast eklenti surecinde USER/LOGNAME yok; Claude Code anahtar
-  // zincirindeki uyelik kaydini bunlarla aradigi icin yoksa "Not logged in"
-  // der (2026-10-11'de dogrulandi).
+  // Raycast extension processes have no USER/LOGNAME. Claude Code looks up its
+  // Keychain login with them and reports "Not logged in" without them
+  // (verified 2026-10-11).
   const { username } = userInfo();
   env.USER ??= username;
   env.LOGNAME ??= username;
-  // ANTHROPIC_API_KEY varsa -p her zaman onu kullanir, uyelik devre disi kalir.
+  // With ANTHROPIC_API_KEY set, -p always uses it instead of the subscription.
   delete env.ANTHROPIC_API_KEY;
   env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1";
@@ -95,16 +97,16 @@ export function childEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-// Oturum dosyalari ~/.claude/projects/<cwd> altina yazilir; gercek projelere
-// karismasin diye eklentinin kendi klasorunde calistiriyoruz.
+// Session files go to ~/.claude/projects/<cwd>; run in the extension's own
+// folder so they don't mix with real projects.
 export function workDir(): string {
   const dir = join(environment.supportPath, "sessions");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
-// Iptal edilen ilk tur da oturum kaydi birakabilir; tahmin yerine diskte bak.
-// Ayni id ile tekrar --session-id verilirse CLI "zaten kullanimda" hatasi verir.
+// A cancelled first turn can still leave a session file, so check the disk
+// instead of guessing: reusing an id with --session-id fails as "in use".
 function sessionExists(sessionId: string): boolean {
   const root = join(homedir(), ".claude/projects");
   try {
@@ -145,7 +147,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     return Promise.resolve({
       text: "",
       isError: true,
-      error: { kind: "not-installed", message: "Claude Code CLI bulunamadı." },
+      error: { kind: "not-installed", message: "Claude Code CLI not found." },
     });
   }
 
@@ -153,9 +155,9 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     "-p",
     "--model",
     opts.model ?? currentModel(),
-    // Kodlama ajani degil, sohbet yardimcisi: araclar, MCP, ayar dosyalari,
-    // slash komutlari kapali. Acilis ~9 sn'den ~3 sn'ye iniyor (2026-10-11 olcumu).
-    // --bare daha hizli ama OAuth/uyelik okumuyor, o yuzden kullanilamaz.
+    // A chat assistant, not a coding agent: tools, MCP, settings files and
+    // slash commands are off. Time to answer drops from ~9 s to ~3 s
+    // (measured 2026-10-11). --bare is faster but ignores OAuth logins.
     "--tools",
     "",
     "--strict-mcp-config",
@@ -184,8 +186,8 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
       env: childEnv(),
       stdio: ["pipe", "pipe", "pipe"],
     });
-    // Prompt stdin'den: argv uzunluk/kacis sorunlari olmaz. stdin acik kalirsa
-    // -p hic donmez, o yuzden hemen end().
+    // Prompt via stdin avoids argv length/escaping issues. -p never returns
+    // while stdin is open, so end() right away.
     child.stdin.end(opts.prompt);
 
     let text = "";
@@ -198,7 +200,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
 
     const onAbort = () => {
       cancelled = true;
-      // SIGINT turu temiz bitirir; SIGTERM'de oturum kaydi yarim kalir.
+      // SIGINT ends the turn cleanly; SIGTERM leaves a partial session record.
       child.kill("SIGINT");
     };
     if (opts.signal?.aborted) onAbort();
@@ -245,19 +247,19 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         resolve({
           text,
           isError: true,
-          error: { kind: "cancelled", message: "Durduruldu." },
+          error: { kind: "cancelled", message: "Stopped." },
           rateLimit,
         });
         return;
       }
-      // -p calisma ici hatalari stderr'e degil sonuc metnine yazar.
+      // -p reports in-run errors in the result text, not on stderr.
       const finalText = text || resultText || "";
       if (resultIsError || (code !== 0 && !finalText)) {
         const message = (
           resultText ||
           stderr ||
           finalText ||
-          `claude ${code} koduyla çıktı`
+          `claude exited with code ${code}`
         ).trim();
         resolve({
           text: finalText,

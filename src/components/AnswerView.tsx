@@ -16,9 +16,9 @@ import { ChatView } from "./ChatView";
 import { ErrorActions, ModelSubmenu, STOP_SHORTCUT } from "./shared";
 
 export interface AnswerViewProps {
-  // Modele giden tam metin (secim + talimat olabilir).
+  // Full text sent to the model (may include the selection and instructions).
   prompt: string;
-  // Ekranda ve gecmiste gorunen kisa hali.
+  // Short form shown on screen and in history.
   question: string;
   systemPrompt?: string;
   navigationTitle?: string;
@@ -27,7 +27,7 @@ export interface AnswerViewProps {
 export function AnswerView(props: AnswerViewProps) {
   const { push } = useNavigation();
   const [model, setModel] = useState(currentModel);
-  // Her calistirma kendi oturumunu acar; "Sohbette Devam Et" bu oturumu --resume eder.
+  // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useClaudeStream();
   const catalog = useModels();
@@ -68,7 +68,7 @@ export function AnswerView(props: AnswerViewProps) {
   const body =
     stream.error && !stream.text
       ? errorMarkdown(stream.error)
-      : stream.text || "_Claude düşünüyor…_";
+      : stream.text || "_Thinking…_";
   const markdown = `**${escape(props.question)}**\n\n---\n\n${body}`;
   const done = !stream.isLoading && !stream.error && stream.text.length > 0;
 
@@ -83,7 +83,7 @@ export function AnswerView(props: AnswerViewProps) {
             <Detail.Metadata.Label title="Model" text={modelLabel(model)} />
             {stream.durationMs ? (
               <Detail.Metadata.Label
-                title="Süre"
+                title="Duration"
                 text={`${(stream.durationMs / 1000).toFixed(1)} sn`}
               />
             ) : null}
@@ -101,7 +101,7 @@ export function AnswerView(props: AnswerViewProps) {
         <ActionPanel>
           {stream.isLoading ? (
             <Action
-              title="Durdur"
+              title="Stop"
               icon={Icon.Stop}
               shortcut={STOP_SHORTCUT}
               onAction={stream.stop}
@@ -109,17 +109,14 @@ export function AnswerView(props: AnswerViewProps) {
           ) : null}
           {done ? (
             <>
-              <Action.Paste
-                title="Ön Uygulamaya Yapıştır"
-                content={stream.text}
-              />
+              <Action.Paste title="Paste to Active App" content={stream.text} />
               <Action
-                title="Sohbette Devam Et"
+                title="Continue in Chat"
                 icon={Icon.Bubble}
                 onAction={continueInChat}
               />
               <Action.CopyToClipboard
-                title="Kopyala"
+                title="Copy Answer"
                 content={stream.text}
                 shortcut={Keyboard.Shortcut.Common.Copy}
               />
@@ -129,13 +126,13 @@ export function AnswerView(props: AnswerViewProps) {
           {!stream.isLoading ? (
             <>
               <Action
-                title="Yeniden Üret"
+                title="Regenerate"
                 icon={Icon.ArrowClockwise}
                 shortcut={Keyboard.Shortcut.Common.Refresh}
                 onAction={() => regenerate()}
               />
               <ModelSubmenu
-                title="Başka Modelle Sor"
+                title="Ask Another Model"
                 current={model}
                 models={catalog.models}
                 onSelect={regenerate}

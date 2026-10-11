@@ -45,7 +45,7 @@ export function ChatView({
   const stream = useClaudeStream();
   const catalog = useModels();
   const sentFirst = useRef(false);
-  // Istek surerken "Yeni Sohbet" acilirsa gec gelen cevap yeni sohbete yazilmasin.
+  // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
 
   const send = async (question: string) => {
@@ -115,28 +115,32 @@ export function ChatView({
   };
 
   const answerOf = (m: Message) => {
-    if (m.id === pendingId) return stream.text || "_Claude düşünüyor…_";
+    if (m.id === pendingId) return stream.text || "_Thinking…_";
     return m.error ?? m.answer;
   };
 
   const messages = [...conversation.messages].reverse();
   const sendAction = input.trim() ? (
-    <Action title="Gönder" icon={Icon.ArrowUp} onAction={() => send(input)} />
+    <Action
+      title="Send Message"
+      icon={Icon.ArrowUp}
+      onAction={() => send(input)}
+    />
   ) : null;
 
   return (
     <List
-      navigationTitle={conversation.title || "Yeni Sohbet"}
+      navigationTitle={conversation.title || "New Chat"}
       isLoading={stream.isLoading}
       isShowingDetail={messages.length > 0}
       searchBarPlaceholder={
         conversation.messages.length
-          ? "Devam sorusu yaz, ↵ ile gönder"
-          : "Claude'a sor, ↵ ile gönder"
+          ? "Ask a follow-up, press ↵ to send"
+          : "Ask anything, press ↵ to send"
       }
       searchText={input}
       onSearchTextChange={setInput}
-      // Arama kutusu burada mesaj girisi; listeyi filtrelemesin.
+      // The search bar is the message input here; it must not filter the list.
       filtering={false}
       selectedItemId={selectedId}
       onSelectionChange={(id) => id && setSelectedId(id)}
@@ -166,8 +170,8 @@ export function ChatView({
       {messages.length === 0 ? (
         <List.EmptyView
           icon={Icon.Bubble}
-          title="Yeni sohbet"
-          description={`${modelLabel(conversation.model)} · Sorunu yaz ve ↵'e bas`}
+          title="New Chat"
+          description={`${modelLabel(conversation.model)} · Type a question and press ↵`}
         />
       ) : (
         messages.map((m) => {
@@ -195,11 +199,11 @@ export function ChatView({
                   {m.answer ? (
                     <>
                       <Action.Paste
-                        title="Ön Uygulamaya Yapıştır"
+                        title="Paste to Active App"
                         content={m.answer}
                       />
                       <Action.CopyToClipboard
-                        title="Kopyala"
+                        title="Copy Answer"
                         content={m.answer}
                         shortcut={Keyboard.Shortcut.Common.Copy}
                       />
@@ -207,7 +211,7 @@ export function ChatView({
                   ) : null}
                   {stream.isLoading ? (
                     <Action
-                      title="Durdur"
+                      title="Stop"
                       icon={Icon.Stop}
                       shortcut={STOP_SHORTCUT}
                       onAction={stream.stop}
@@ -243,19 +247,19 @@ function ChatActions({
   return (
     <ActionPanel.Section>
       <Action
-        title="Yeni Sohbet"
+        title="New Chat"
         icon={Icon.PlusCircle}
         shortcut={Keyboard.Shortcut.Common.New}
         onAction={onNew}
       />
       <Action
-        title="Sohbet Geçmişi"
+        title="Chat History"
         icon={Icon.Clock}
         shortcut={Keyboard.Shortcut.Common.ToggleQuickLook}
         onAction={onHistory}
       />
       <Action
-        title="Model Listesini Yenile"
+        title="Refresh Model List"
         icon={Icon.ArrowClockwise}
         onAction={onRefreshModels}
       />

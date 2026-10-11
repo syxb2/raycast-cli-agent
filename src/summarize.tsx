@@ -4,9 +4,9 @@ import { summarizePrompt } from "./lib/prompts";
 export default function Command() {
   return (
     <SelectionAnswer
-      navigationTitle="Özet"
+      navigationTitle="Summary"
       buildPrompt={summarizePrompt}
-      question={(s) => `Özetle: ${s.text}`}
+      question={(s) => `Summarize: ${s.text}`}
     />
   );
 }

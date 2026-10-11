@@ -7,20 +7,25 @@ import {
   LocalStorage,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
+import { ModelSubmenu } from "./components/shared";
 import { errorMarkdown } from "./lib/format";
 import {
+  AUTO,
+  autoLabel,
   LANGUAGES,
-  resolveTargetLanguage,
-  translateSystemPrompt,
-} from "./lib/prompts";
+  isWrongLanguage,
+  resolveTranslation,
+  RETRY_MODEL,
+} from "./lib/languages";
+import { useModels } from "./lib/modelCatalog";
+import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
+import { translateSystemPrompt, translationPrompt } from "./lib/prompts";
 import { readSourceText } from "./lib/selection";
 import { useClaudeStream } from "./lib/useClaudeStream";
-import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
-import { useModels } from "./lib/modelCatalog";
-import { ModelSubmenu } from "./components/shared";
 
-// Raycast'in Translate'i gibi: arama kutusu girdi, yazmayi birakinca cevirir.
-// Her istek ~3 sn surdugu icin tus basimlarini bekletip tek istek atiyoruz.
+// Like Raycast's Translate: the search bar is the input and translation starts
+// when typing pauses. Each request takes ~3 s, so keystrokes are debounced
+// into a single request.
 const DEBOUNCE_MS = 600;
 const LANG_KEY = "translate-language";
 
@@ -32,6 +37,7 @@ export default function Command() {
   const stream = useClaudeStream();
   const catalog = useModels();
   const lastRequest = useRef("");
+  const [retriedWith, setRetriedWith] = useState<string>();
 
   useEffect(() => {
     Promise.all([
@@ -39,7 +45,11 @@ export default function Command() {
       LocalStorage.getItem<string>(LANG_KEY),
     ]).then(([source, lang]) => {
       if (source) setText(source.text);
-      setLanguage(lang ?? "auto");
+      setLanguage(
+        lang && (lang === AUTO || LANGUAGES.some((l) => l.name === lang))
+          ? lang
+          : AUTO,
+      );
       setReady(true);
     });
   }, []);
@@ -53,15 +63,25 @@ export default function Command() {
     }
     const key = `${model}:${language}:${input}`;
     if (key === lastRequest.current) return;
-    const t = setTimeout(() => {
+    const t = setTimeout(async () => {
       lastRequest.current = key;
-      stream.run({
-        prompt: input,
-        model,
-        systemPrompt: translateSystemPrompt(
-          resolveTargetLanguage(input, language),
-        ),
-      });
+      setRetriedWith(undefined);
+      const direction = resolveTranslation(input, language);
+      const request = {
+        prompt: translationPrompt(input),
+        systemPrompt: translateSystemPrompt(direction),
+      };
+      const result = await stream.run({ ...request, model });
+      // One retry with a stronger model if the output is in the wrong language.
+      if (
+        lastRequest.current === key &&
+        !result.isError &&
+        model !== RETRY_MODEL &&
+        isWrongLanguage(result.text, direction.target)
+      ) {
+        setRetriedWith(RETRY_MODEL);
+        await stream.run({ ...request, model: RETRY_MODEL });
+      }
     }, DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [text, language, model, ready]);
@@ -78,33 +98,38 @@ export default function Command() {
 
   const translation = stream.text.trim();
   const hasInput = text.trim().length > 0;
+  const target =
+    hasInput && language ? resolveTranslation(text, language).target : "";
   const markdown =
     stream.error && !translation
       ? errorMarkdown(stream.error)
-      : translation || "_Çevriliyor…_";
+      : translation || "_Translating…_";
 
   return (
     <List
       isLoading={!ready || stream.isLoading}
       searchText={text}
       onSearchTextChange={setText}
-      searchBarPlaceholder="Çevrilecek metni yaz veya yapıştır"
+      searchBarPlaceholder="Type or paste text to translate"
       filtering={false}
       isShowingDetail={hasInput}
       searchBarAccessory={
         language ? (
           <List.Dropdown
-            tooltip="Hedef Dil"
+            tooltip="Target Language"
             value={language}
             onChange={changeLanguage}
           >
-            {LANGUAGES.map((l) => (
-              <List.Dropdown.Item
-                key={l.value}
-                title={l.title}
-                value={l.value}
-              />
-            ))}
+            <List.Dropdown.Item title={autoLabel()} value={AUTO} />
+            <List.Dropdown.Section>
+              {LANGUAGES.map((l) => (
+                <List.Dropdown.Item
+                  key={l.name}
+                  title={l.name}
+                  value={l.name}
+                />
+              ))}
+            </List.Dropdown.Section>
           </List.Dropdown>
         ) : undefined
       }
@@ -112,31 +137,35 @@ export default function Command() {
       {!hasInput ? (
         <List.EmptyView
           icon={Icon.Globe}
-          title="Çevrilecek metni yaz"
-          description="Metin seçiliyken açarsan kendiliğinden gelir"
+          title="Type Text to Translate"
+          description="Selected text is filled in automatically"
         />
       ) : (
         <List.Item
-          title={`→ ${LANGUAGES.find((l) => l.value === resolveTargetLanguage(text, language ?? "auto"))?.title ?? ""}`}
+          title={`→ ${target}`}
+          subtitle={
+            retriedWith
+              ? `${modelLabel(retriedWith)} (retried: wrong language)`
+              : modelLabel(model)
+          }
           icon={Icon.Globe}
           detail={<List.Item.Detail markdown={markdown} />}
-          subtitle={modelLabel(model)}
           actions={
             <ActionPanel>
               {translation ? (
                 <>
                   <Action.Paste
-                    title="Ön Uygulamaya Yapıştır"
+                    title="Paste to Active App"
                     content={translation}
                   />
                   <Action.CopyToClipboard
-                    title="Kopyala"
+                    title="Copy Translation"
                     content={translation}
                     shortcut={Keyboard.Shortcut.Common.Copy}
                   />
-                  {language === "auto" ? (
+                  {language === AUTO ? (
                     <Action
-                      title="Ters Yöne Çevir"
+                      title="Translate Back"
                       icon={Icon.Switch}
                       shortcut={{ modifiers: ["cmd"], key: "t" }}
                       onAction={() => setText(translation)}
@@ -145,7 +174,7 @@ export default function Command() {
                 </>
               ) : null}
               <ModelSubmenu
-                title="Model Değiştir"
+                title="Change Model"
                 current={model}
                 models={catalog.models}
                 onSelect={changeModel}

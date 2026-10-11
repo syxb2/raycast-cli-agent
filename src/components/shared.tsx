@@ -29,7 +29,7 @@ export function ErrorActions({ error }: { error: ClaudeError }) {
   if (error.kind === "not-logged-in") {
     return (
       <Action
-        title="Terminalde Giriş Yap"
+        title="Open Terminal for Login"
         icon={Icon.Terminal}
         onAction={openLoginInTerminal}
       />
@@ -38,7 +38,7 @@ export function ErrorActions({ error }: { error: ClaudeError }) {
   if (error.kind === "not-installed") {
     return (
       <Action
-        title="Eklenti Ayarlarını Aç"
+        title="Open Extension Preferences"
         icon={Icon.Gear}
         onAction={openExtensionPreferences}
       />
@@ -56,7 +56,7 @@ export const MODEL_SHORTCUT: Keyboard.Shortcut = {
   key: "r",
 };
 
-// Liste CLI'den gelir (useModels); secilen model kalici olur.
+// The list comes from the CLI (useModels); the chosen model persists.
 export function ModelSubmenu(props: {
   title: string;
   current: string;
@@ -82,12 +82,12 @@ export function ModelSubmenu(props: {
       ))}
       <ActionPanel.Section>
         <Action
-          title="Model Listesini Yenile"
+          title="Refresh Model List"
           icon={Icon.ArrowClockwise}
           onAction={props.onRefresh}
         />
         <Action
-          title="Ek Model Ekle…"
+          title="Add Extra Model…"
           icon={Icon.Plus}
           onAction={openExtensionPreferences}
         />

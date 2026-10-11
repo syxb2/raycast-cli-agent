@@ -10,7 +10,7 @@ interface Props {
   navigationTitle: string;
 }
 
-// Secimi okuyup AnswerView'e verir; secim yoksa panodaki metne duser.
+// Reads the selection and hands it to AnswerView; falls back to the clipboard.
 export function SelectionAnswer(props: Props) {
   const [source, setSource] = useState<SourceText | null>();
 
@@ -20,7 +20,7 @@ export function SelectionAnswer(props: Props) {
       if (s?.from === "clipboard") {
         showToast({
           style: Toast.Style.Success,
-          title: "Seçim yok, panodaki metin kullanıldı",
+          title: "No selection, using clipboard text",
         });
       }
     });
@@ -32,8 +32,8 @@ export function SelectionAnswer(props: Props) {
       <List>
         <List.EmptyView
           icon={Icon.Text}
-          title="Metin bulunamadı"
-          description="Bir uygulamada metin seç veya panoya kopyala."
+          title="No Text Found"
+          description="Select text in any app or copy it to the clipboard."
         />
       </List>
     );

@@ -9,13 +9,13 @@ export interface Message {
   answer: string;
   createdAt: number;
   error?: string;
-  // Sohbet ortasinda model degisebilir; --resume ile baglam korunuyor.
+  // The model can change mid-chat; --resume keeps the context.
   model?: string;
 }
 
 export interface Conversation {
   id: string;
-  // Claude Code oturumu; devam sorulari --resume ile buna baglanir.
+  // Claude Code session; follow-ups attach to it with --resume.
   sessionId: string;
   title: string;
   model: string;
@@ -24,8 +24,8 @@ export interface Conversation {
   messages: Message[];
 }
 
-// Sohbet metinleri dosyada, LocalStorage'da yalnizca kucuk bir dizin tutulur:
-// Raycast eklentilerinde 100 MB bellek siniri var.
+// Chat contents live in files; LocalStorage only keeps a small index because
+// Raycast extensions have a 100 MB memory limit.
 const INDEX_KEY = "conversation-index";
 
 function dir(): string {

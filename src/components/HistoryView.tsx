@@ -27,9 +27,9 @@ export function HistoryView() {
 
   const remove = async (c: ConversationSummary) => {
     const ok = await confirmAlert({
-      title: "Sohbet silinsin mi?",
+      title: "Delete Chat?",
       message: c.title,
-      primaryAction: { title: "Sil", style: Alert.ActionStyle.Destructive },
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
     });
     if (!ok) return;
     await deleteConversation(c.id);
@@ -37,12 +37,12 @@ export function HistoryView() {
   };
 
   return (
-    <List isLoading={!items} searchBarPlaceholder="Sohbetlerde ara">
-      <List.EmptyView icon={Icon.Clock} title="Henüz sohbet yok" />
+    <List isLoading={!items} searchBarPlaceholder="Search chats">
+      <List.EmptyView icon={Icon.Clock} title="No Chats Yet" />
       {items?.map((c) => (
         <List.Item
           key={c.id}
-          title={c.title || "Adsız sohbet"}
+          title={c.title || "Untitled Chat"}
           icon={Icon.Bubble}
           accessories={[
             { text: modelLabel(c.model) },
@@ -51,13 +51,13 @@ export function HistoryView() {
           actions={
             <ActionPanel>
               <Action.Push
-                title="Aç"
+                title="Open Chat"
                 icon={Icon.Bubble}
                 target={<ConversationLoader id={c.id} />}
                 onPop={reload}
               />
               <Action
-                title="Sil"
+                title="Delete Chat"
                 icon={Icon.Trash}
                 style={Action.Style.Destructive}
                 shortcut={Keyboard.Shortcut.Common.Remove}
@@ -73,11 +73,12 @@ export function HistoryView() {
 
 function ConversationLoader({ id }: { id: string }) {
   const conversation = loadConversation(id);
-  if (!conversation)
+  if (!conversation) {
     return (
       <List>
-        <List.EmptyView icon={Icon.Warning} title="Sohbet dosyası bulunamadı" />
+        <List.EmptyView icon={Icon.Warning} title="Chat File Not Found" />
       </List>
     );
+  }
   return <ChatView initial={conversation} />;
 }

@@ -4,9 +4,9 @@ import { explainPrompt } from "./lib/prompts";
 export default function Command() {
   return (
     <SelectionAnswer
-      navigationTitle="Açıklama"
+      navigationTitle="Explanation"
       buildPrompt={explainPrompt}
-      question={(s) => `Açıkla: ${s.text}`}
+      question={(s) => `Explain: ${s.text}`}
     />
   );
 }

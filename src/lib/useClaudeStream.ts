@@ -8,8 +8,8 @@ import {
 } from "./claude";
 import { saveRateLimit } from "./storage";
 
-// Her delta'da setState Raycast'te gorunur gecikme yaratir; metni ref'te
-// biriktirip bu aralikla ekrana basiyoruz.
+// A setState per delta makes Raycast visibly lag; buffer the text in a ref and
+// flush it at this interval.
 const FLUSH_MS = 80;
 
 export interface StreamState {
@@ -31,7 +31,7 @@ export function useClaudeStream() {
 
   const stop = useCallback(() => controller.current?.abort(), []);
 
-  // Gorunumden cikilinca (Esc) calisan istek durdurulur.
+  // Leaving the view (Esc) stops the running request.
   useEffect(() => stop, [stop]);
 
   const run = useCallback(

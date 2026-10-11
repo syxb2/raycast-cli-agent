@@ -1,5 +1,5 @@
-# v* etiketi gonderilince eklentiyi derleyip install.sh'in indirdigi
-# cli-assistant.tar.gz paketiyle bir GitHub Release olusturur.
+# On a v* tag, builds the extension and creates a GitHub Release with the
+# cli-assistant.tar.gz package that install.sh downloads.
 name: Release
 
 on:
