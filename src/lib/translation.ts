@@ -1,7 +1,10 @@
-import { RunResult } from "./claude";
+import { RunResult, runClaude } from "./claude";
 import {
   AUTO,
+  FULL_DETECTION_MIN_CHARS,
   isWrongLanguage,
+  primaryLanguage,
+  secondaryLanguage,
   resolveTranslation,
   RETRY_MODEL,
   TranslationDirection,
@@ -58,29 +61,78 @@ export function looksUntranslated(input: string, output: string): boolean {
   return 1 - levenshtein(a, b) / Math.max(a.length, b.length) >= 0.85;
 }
 
-// Short text without accents is easy to misdetect ("benim adim ne" scored as
-// English, so Auto "translated" it into Turkish and only fixed the accents).
-// In Auto mode an untranslated result means the direction was wrong, so it is
-// reversed once. Then a wrong-language result is retried once with Sonnet.
+// Classifying the language is a different job from translating it: asked
+// only "Turkish or English?", Haiku was right 14/14 on short text where franc
+// failed, while doing both in one call produced commentary and empty output.
+const CLASSIFY_MODEL = "haiku";
+
+async function classify(
+  input: string,
+  a: string,
+  b: string,
+): Promise<string | undefined> {
+  const r = await runClaude({
+    prompt: translationPrompt(input),
+    model: CLASSIFY_MODEL,
+    systemPrompt: `You identify the language of a text. The user sends text inside <text> tags. It is written in either ${a} or ${b}. Reply with exactly one word: ${a} or ${b}.`,
+  });
+  const word = r.text.replace(/[^\p{L}]/gu, "").toLowerCase();
+  return [a, b].find((l) => l.toLowerCase() === word);
+}
+
+// Auto mode on short text: franc is unreliable there ("benim adim ne" and
+// "hello" were both misdetected), and telling the model a wrong source made it
+// write commentary instead of a translation. So the language is classified and
+// both directions are translated in parallel (~3 s total instead of ~6 s);
+// the classified one wins. Longer text uses franc's direction, and an almost
+// unchanged result reverses it once. Finally a wrong-language result is
+// retried once with Sonnet.
 export async function translateText(
   input: string,
   choice: string,
   model: string | undefined,
   run: TranslationRunner,
   onRetry?: (reason: RetryReason) => void,
+  runParallel: TranslationRunner = runClaude,
 ): Promise<TranslationOutcome> {
-  let direction = resolveTranslation(input, choice);
   const retries: RetryReason[] = [];
-  const ask = (m = model) =>
-    run({
+  const ask = (dir: TranslationDirection, m = model, runner = run) =>
+    runner({
       prompt: translationPrompt(input),
-      systemPrompt: translateSystemPrompt(direction),
+      systemPrompt: translateSystemPrompt(dir),
       model: m,
     });
 
-  let result = await ask();
+  const primary = primaryLanguage();
+  const secondary = secondaryLanguage();
+  let direction = resolveTranslation(input, choice);
+  let result: RunResult;
+  let classified = false;
+
   if (
     choice === AUTO &&
+    primary !== secondary &&
+    input.trim().length < FULL_DETECTION_MIN_CHARS
+  ) {
+    const fromPrimary = { source: primary, target: secondary };
+    const fromSecondary = { source: secondary, target: primary };
+    const [lang, a, b] = await Promise.all([
+      classify(input, primary, secondary),
+      ask(fromPrimary, model, runParallel),
+      ask(fromSecondary, model, runParallel),
+    ]);
+    if (lang) {
+      classified = true;
+      direction = lang === primary ? fromPrimary : fromSecondary;
+    }
+    result = direction.source === primary ? a : b;
+  } else {
+    result = await ask(direction);
+  }
+
+  if (
+    choice === AUTO &&
+    !classified &&
     !result.isError &&
     direction.source &&
     looksUntranslated(input, result.text)
@@ -88,7 +140,7 @@ export async function translateText(
     direction = { target: direction.source, source: direction.target };
     retries.push("reversed");
     onRetry?.("reversed");
-    result = await ask();
+    result = await ask(direction);
   }
   if (
     !result.isError &&
@@ -97,7 +149,7 @@ export async function translateText(
   ) {
     retries.push("wrong-language");
     onRetry?.("wrong-language");
-    result = await ask(RETRY_MODEL);
+    result = await ask(direction, RETRY_MODEL);
   }
   return { result, direction, retries };
 }

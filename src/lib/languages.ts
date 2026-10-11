@@ -73,7 +73,7 @@ export function isInLanguage(
 
 // Long enough for full detection to be trustworthy (on short text it mistook
 // Turkish for Indonesian).
-const FULL_DETECTION_MIN_CHARS = 30;
+export const FULL_DETECTION_MIN_CHARS = 30;
 const ALL_CODES = LANGUAGES.map((l) => l.code);
 
 function detectLong(text: string): string | undefined {

@@ -21,6 +21,7 @@ import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
 import { readSourceText } from "./lib/selection";
 import { RetryReason, translateText } from "./lib/translation";
 import { useClaudeStream } from "./lib/useClaudeStream";
+import { RunResult } from "./lib/claude";
 
 // Like Raycast's Translate: the search bar is the input and translation starts
 // when typing pauses. Each request takes ~3 s, so keystrokes are debounced
@@ -38,6 +39,10 @@ export default function Command() {
   const lastRequest = useRef("");
   const [retries, setRetries] = useState<RetryReason[]>([]);
   const [target, setTarget] = useState("");
+  // Short Auto text is translated off the stream (in parallel), so the view
+  // keeps its own loading flag and final result.
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<RunResult>();
 
   useEffect(() => {
     Promise.all([
@@ -66,6 +71,8 @@ export default function Command() {
     const t = setTimeout(async () => {
       lastRequest.current = key;
       setRetries([]);
+      setDone(undefined);
+      setBusy(true);
       setTarget(resolveTranslation(input, language).target);
       const outcome = await translateText(
         input,
@@ -85,7 +92,10 @@ export default function Command() {
           setRetries((r) => [...r, reason]);
         },
       );
-      if (lastRequest.current === key) setTarget(outcome.direction.target);
+      if (lastRequest.current !== key) return;
+      setTarget(outcome.direction.target);
+      setDone(outcome.result);
+      setBusy(false);
     }, DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [text, language, model, ready]);
@@ -100,16 +110,17 @@ export default function Command() {
     LocalStorage.setItem(LANG_KEY, value);
   };
 
-  const translation = stream.text.trim();
+  const translation = (done ? done.text : stream.text).trim();
+  const error = done ? done.error : stream.error;
   const hasInput = text.trim().length > 0;
   const markdown =
-    stream.error && !translation
-      ? errorMarkdown(stream.error)
+    error && !translation
+      ? errorMarkdown(error)
       : translation || "_Translating…_";
 
   return (
     <List
-      isLoading={!ready || stream.isLoading}
+      isLoading={!ready || busy || stream.isLoading}
       searchText={text}
       onSearchTextChange={setText}
       searchBarPlaceholder="Type or paste text to translate"

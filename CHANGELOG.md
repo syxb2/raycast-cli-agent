@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Reliable Auto Direction for Short Text] - 2026-10-11
+
+- Short text in Auto mode: a separate Haiku call classifies the language while both directions are translated in parallel (~3 s); no more commentary when a short phrase was misdetected
+
 ## [Reverse Misdetected Translations] - 2026-10-11
 
 - In Auto mode, a translation that comes back (almost) unchanged means the language was misdetected (common for short text without accents, e.g. "benim adim ne"); the direction is reversed and the text translated again
