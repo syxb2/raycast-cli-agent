@@ -1,5 +1,11 @@
 # CLI Assistant Changelog
 
+## [Model Listesi CLI'den] - 2026-10-11
+
+- Model listesi sabit değil; Claude Code CLI'den planına göre alınır, önbelleğe yazılır ve günde bir yenilenir
+- Menülere "Model Listesini Yenile" eklendi
+- Varsayılan model ayarı takma adlara (haiku, sonnet, opus, fable) geçti; her zaman en yeni sürüm kullanılır
+
 ## [Model Seçimi] - 2026-10-11
 
 - Seçilen model tüm komutlarda ortak ve kalıcı; Sohbet ve Çevir'de menüden, cevap ekranında ⌘⇧R ile değiştirilir

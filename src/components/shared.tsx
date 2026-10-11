@@ -7,7 +7,7 @@ import {
 } from "@raycast/api";
 import { spawn } from "node:child_process";
 import { ClaudeError } from "../lib/claude";
-import { availableModels } from "../lib/models";
+import { ModelOption, sameModel } from "../lib/models";
 
 function openLoginInTerminal() {
   spawn(
@@ -56,11 +56,13 @@ export const MODEL_SHORTCUT: Keyboard.Shortcut = {
   key: "r",
 };
 
-// Secilen model kalici olur; Ek Modeller ayari da listeye girer.
+// Liste CLI'den gelir (useModels); secilen model kalici olur.
 export function ModelSubmenu(props: {
   title: string;
   current: string;
+  models: ModelOption[];
   onSelect: (model: string) => void;
+  onRefresh: () => void;
 }) {
   return (
     <ActionPanel.Submenu
@@ -68,19 +70,28 @@ export function ModelSubmenu(props: {
       icon={Icon.Switch}
       shortcut={MODEL_SHORTCUT}
     >
-      {availableModels().map((m) => (
+      {props.models.map((m) => (
         <Action
           key={m.value}
           title={m.title}
-          icon={m.value === props.current ? Icon.Checkmark : Icon.Circle}
+          icon={
+            sameModel(m.value, props.current) ? Icon.Checkmark : Icon.Circle
+          }
           onAction={() => props.onSelect(m.value)}
         />
       ))}
-      <Action
-        title="Ek Model Ekle…"
-        icon={Icon.Plus}
-        onAction={openExtensionPreferences}
-      />
+      <ActionPanel.Section>
+        <Action
+          title="Model Listesini Yenile"
+          icon={Icon.ArrowClockwise}
+          onAction={props.onRefresh}
+        />
+        <Action
+          title="Ek Model Ekle…"
+          icon={Icon.Plus}
+          onAction={openExtensionPreferences}
+        />
+      </ActionPanel.Section>
     </ActionPanel.Submenu>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { readSourceText } from "./lib/selection";
 import { useClaudeStream } from "./lib/useClaudeStream";
 import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
+import { useModels } from "./lib/modelCatalog";
 import { ModelSubmenu } from "./components/shared";
 
 // Raycast'in Translate'i gibi: arama kutusu girdi, yazmayi birakinca cevirir.
@@ -29,6 +30,7 @@ export default function Command() {
   const [ready, setReady] = useState(false);
   const [model, setModel] = useState(currentModel);
   const stream = useClaudeStream();
+  const catalog = useModels();
   const lastRequest = useRef("");
 
   useEffect(() => {
@@ -145,7 +147,9 @@ export default function Command() {
               <ModelSubmenu
                 title="Model Değiştir"
                 current={model}
+                models={catalog.models}
                 onSelect={changeModel}
+                onRefresh={() => catalog.refresh(true)}
               />
             </ActionPanel>
           }

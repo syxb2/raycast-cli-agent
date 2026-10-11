@@ -19,7 +19,7 @@ Raycast Pro olmadan Raycast'te yapay zekâ: soru sor, sohbet et, seçili metni d
 | **Çevir ve Değiştir** | Seçili metni pencere açmadan çevirip yerine yapıştırır. |
 | **Özetle** · **Açıkla** | Seçili metni (seçim yoksa panodakini) özetler veya açıklar. |
 
-**Model seçimi:** Sohbet ve Çevir'de arama çubuğundaki menüden, cevap ekranında <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> ile. Seçilen model tüm komutlarda ortaktır ve hatırlanır; sohbetin ortasında değiştirince bağlam korunur.
+**Model seçimi:** Sohbet ve Çevir'de arama çubuğundaki menüden, cevap ekranında <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> ile. Liste sabit değil, Claude Code CLI'den planına göre gelir (yeni modeller kendiliğinden görünür). Seçilen model tüm komutlarda ortaktır ve hatırlanır; sohbetin ortasında değiştirince bağlam korunur.
 
 Cevap ekranında: <kbd>↵</kbd> ön uygulamaya yapıştır, <kbd>⌘</kbd><kbd>↵</kbd> sohbette devam et, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> kopyala, <kbd>⌘</kbd><kbd>R</kbd> yeniden üret, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> başka modelle sor (seçim kalıcı olur), <kbd>⌘</kbd><kbd>.</kbd> durdur.
 
@@ -53,8 +53,8 @@ npm run dev   # eklenti Raycast'e eklendikten sonra Ctrl+C ile durdurabilirsin
 
 | Ayar | Açıklama |
 | --- | --- |
-| Varsayılan Model | Haiku 5.5 (en hızlı), Sonnet 5.5, Opus 5.5, Fable 5.1. Uygulama içinde seçtiğin model bunun yerine geçer. |
-| Ek Modeller | Listeye eklenecek, virgülle ayrılmış model adları. `claude --model`'in kabul ettiği her ad olur: `opus`, `sonnet`, `claude-opus-5-5[1m]` vb. |
+| Varsayılan Model | Haiku, Sonnet, Opus, Fable (takma adlar; her zaman ailenin en yeni sürümü). Uygulama içinde seçtiğin model bunun yerine geçer. |
+| Ek Modeller | Planının listesinde görünmeyen modeller için, virgülle ayrılmış (ör. `claude-opus-5-5[1m]`). |
 | Claude CLI Yolu | Boşsa `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin` denenir |
 | Ek Talimat | Her isteğe eklenen kişisel talimat (üslup, hitap vb.) |
 
@@ -73,6 +73,7 @@ Diğer ayrıntılar:
 - **Proxy:** `--setting-sources ""` kullanıcı ayarlarını atladığı için `~/.claude/settings.json` içindeki `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` değerleri eklenti tarafından okunup CLI'ye verilir.
 - **Raycast ortamı:** Raycast eklenti süreçlerinde `USER` / `LOGNAME` tanımlı değil; Claude Code bunlar olmadan anahtar zincirindeki girişi bulamayıp `Not logged in` diyor. Eklenti bu değişkenleri kendisi tanımlar.
 - **Çeviri yönü:** "Otomatik (TR ↔ EN)" kararı modele bırakılmaz, metnin Türkçe olup olmadığına eklenti karar verir; modele her zaman tek bir hedef dil gider.
+- **Model listesi:** CLI'nin kontrol protokolüne (Agent SDK'nin `supportedModels()`'inin kullandığı `initialize` isteği) sorulur; model çağrısı yapılmaz, ~1 sn sürer. Sonuç önbelleğe alınır, günde bir arka planda yenilenir; CLI'ye ulaşılamazsa takma adlardan oluşan yedek liste kullanılır.
 - `ANTHROPIC_API_KEY` ortamda tanımlıysa CLI üyelik yerine onu kullanacağı için çocuk süreçten silinir.
 
 ## Kullanım koşulları

@@ -79,7 +79,7 @@ function proxyEnv(): Record<string, string> {
   }
 }
 
-function childEnv(): NodeJS.ProcessEnv {
+export function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...proxyEnv() };
   // Raycast eklenti surecinde USER/LOGNAME yok; Claude Code anahtar
   // zincirindeki uyelik kaydini bunlarla aradigi icin yoksa "Not logged in"
@@ -97,7 +97,7 @@ function childEnv(): NodeJS.ProcessEnv {
 
 // Oturum dosyalari ~/.claude/projects/<cwd> altina yazilir; gercek projelere
 // karismasin diye eklentinin kendi klasorunde calistiriyoruz.
-function workDir(): string {
+export function workDir(): string {
   const dir = join(environment.supportPath, "sessions");
   mkdirSync(dir, { recursive: true });
   return dir;

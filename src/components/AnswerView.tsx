@@ -9,6 +9,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { errorMarkdown, rateLimitLines } from "../lib/format";
 import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
+import { useModels } from "../lib/modelCatalog";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useClaudeStream } from "../lib/useClaudeStream";
 import { ChatView } from "./ChatView";
@@ -29,6 +30,7 @@ export function AnswerView(props: AnswerViewProps) {
   // Her calistirma kendi oturumunu acar; "Sohbette Devam Et" bu oturumu --resume eder.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useClaudeStream();
+  const catalog = useModels();
   const started = useRef("");
 
   useEffect(() => {
@@ -135,7 +137,9 @@ export function AnswerView(props: AnswerViewProps) {
               <ModelSubmenu
                 title="Başka Modelle Sor"
                 current={model}
+                models={catalog.models}
                 onSelect={regenerate}
+                onRefresh={() => catalog.refresh(true)}
               />
             </>
           ) : null}

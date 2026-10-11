@@ -9,11 +9,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { errorMarkdown } from "../lib/format";
 import {
-  availableModels,
   currentModel,
+  matchingValue,
   modelLabel,
   setCurrentModel,
 } from "../lib/models";
+import { useModels } from "../lib/modelCatalog";
 import {
   Conversation,
   Message,
@@ -42,6 +43,7 @@ export function ChatView({
   );
   const [pendingId, setPendingId] = useState<string | undefined>();
   const stream = useClaudeStream();
+  const catalog = useModels();
   const sentFirst = useRef(false);
   // Istek surerken "Yeni Sohbet" acilirsa gec gelen cevap yeni sohbete yazilmasin.
   const activeId = useRef(conversation.id);
@@ -141,10 +143,11 @@ export function ChatView({
       searchBarAccessory={
         <List.Dropdown
           tooltip="Model"
-          value={conversation.model}
+          isLoading={catalog.isRefreshing}
+          value={matchingValue(conversation.model, catalog.models)}
           onChange={changeModel}
         >
-          {availableModels().map((m) => (
+          {catalog.models.map((m) => (
             <List.Dropdown.Item key={m.value} title={m.title} value={m.value} />
           ))}
         </List.Dropdown>
@@ -155,6 +158,7 @@ export function ChatView({
           <ChatActions
             onNew={startNew}
             onHistory={() => push(<HistoryView />)}
+            onRefreshModels={() => catalog.refresh(true)}
           />
         </ActionPanel>
       }
@@ -215,6 +219,7 @@ export function ChatView({
                   <ChatActions
                     onNew={startNew}
                     onHistory={() => push(<HistoryView />)}
+                    onRefreshModels={() => catalog.refresh(true)}
                   />
                 </ActionPanel>
               }
@@ -229,9 +234,11 @@ export function ChatView({
 function ChatActions({
   onNew,
   onHistory,
+  onRefreshModels,
 }: {
   onNew: () => void;
   onHistory: () => void;
+  onRefreshModels: () => void;
 }) {
   return (
     <ActionPanel.Section>
@@ -246,6 +253,11 @@ function ChatActions({
         icon={Icon.Clock}
         shortcut={Keyboard.Shortcut.Common.ToggleQuickLook}
         onAction={onHistory}
+      />
+      <Action
+        title="Model Listesini Yenile"
+        icon={Icon.ArrowClockwise}
+        onAction={onRefreshModels}
       />
     </ActionPanel.Section>
   );

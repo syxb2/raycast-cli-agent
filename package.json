@@ -109,33 +109,33 @@
     {
       "name": "model",
       "title": "Varsayılan Model",
-      "description": "Henüz model seçmediysen kullanılır. Sohbet ve Çevir'deki menüden veya cevap ekranında ⌘⇧R ile seçtiğin model hatırlanır.",
+      "description": "Henüz model seçmediysen kullanılır. Takma adlar her zaman ailenin en yeni sürümüne gider. Uygulama içinde (Sohbet/Çevir menüsü, cevap ekranında ⌘⇧R) seçtiğin model bunun yerine geçer; o listeyi CLI'den alıyoruz.",
       "type": "dropdown",
       "required": false,
-      "default": "claude-haiku-5-5",
+      "default": "haiku",
       "data": [
         {
-          "title": "Haiku 5.5 (hızlı)",
-          "value": "claude-haiku-5-5"
+          "title": "Haiku (en yeni, hızlı)",
+          "value": "haiku"
         },
         {
-          "title": "Sonnet 5.5",
-          "value": "claude-sonnet-5-5"
+          "title": "Sonnet (en yeni)",
+          "value": "sonnet"
         },
         {
-          "title": "Opus 5.5",
-          "value": "claude-opus-5-5"
+          "title": "Opus (en yeni)",
+          "value": "opus"
         },
         {
-          "title": "Fable 5.1",
-          "value": "claude-fable-5-1"
+          "title": "Fable (en yeni)",
+          "value": "fable"
         }
       ]
     },
     {
       "name": "customModels",
       "title": "Ek Modeller",
-      "description": "Listeye eklenecek model adları, virgülle ayrılmış (ör. opus, claude-opus-5-5[1m]). Claude Code'un --model seçeneğinin kabul ettiği her ad olur.",
+      "description": "Planının listesinde görünmeyen modeller için, virgülle ayrılmış (ör. claude-opus-5-5[1m]). Liste zaten Claude Code CLI'den otomatik geliyor.",
       "type": "textfield",
       "required": false,
       "placeholder": "opus, claude-opus-5-5[1m]"
