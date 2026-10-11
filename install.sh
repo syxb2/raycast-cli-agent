@@ -45,6 +45,13 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# releases/latest/download yonlendirmesi yeni surumden sonra birkac dakika
+# eski surumu gosterebiliyor (2026-10-11'de goruldu); once API'den etiketi al.
+if [ -z "${CLI_ASSISTANT_ASSET_URL:-}" ]; then
+  TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+    /usr/bin/python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])' 2>/dev/null || true)"
+  [ -n "$TAG" ] && ASSET_URL="https://github.com/$REPO/releases/download/$TAG/cli-assistant.tar.gz"
+fi
 curl -fsSL "$ASSET_URL" -o "$TMP/pkg.tar.gz" || die "İndirilemedi: $ASSET_URL"
 mkdir "$TMP/pkg"
 tar -xzf "$TMP/pkg.tar.gz" -C "$TMP/pkg"
