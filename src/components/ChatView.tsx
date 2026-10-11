@@ -93,10 +93,13 @@ export function ChatView({
   };
 
   useEffect(() => {
-    if (firstQuestion && !sentFirst.current) {
+    // Deferred for the same StrictMode reason as in AnswerView.
+    if (!firstQuestion || sentFirst.current) return;
+    const timer = setTimeout(() => {
       sentFirst.current = true;
       send(firstQuestion);
-    }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [firstQuestion]);
 
   const startNew = () => {

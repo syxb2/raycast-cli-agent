@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Fix Ask Showing "Stopped."] - 2026-10-11
+
+- Ask AI (and Chat opened with a question) no longer stops right away. Raycast runs development extensions in React StrictMode, whose simulated unmount aborted the request before it could restart
+
 ## [English UI and Language Preferences] - 2026-10-11
 
 - The whole extension, README and install script are in English

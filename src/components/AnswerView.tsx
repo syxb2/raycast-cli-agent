@@ -6,7 +6,7 @@ import {
   Keyboard,
   useNavigation,
 } from "@raycast/api";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { errorMarkdown, rateLimitLines } from "../lib/format";
 import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
@@ -31,18 +31,22 @@ export function AnswerView(props: AnswerViewProps) {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useClaudeStream();
   const catalog = useModels();
-  const started = useRef("");
 
+  // Raycast wraps development extensions in React StrictMode, which mounts,
+  // unmounts and remounts effects. Starting the request right away meant the
+  // simulated unmount aborted it and a "started" guard blocked the restart, so
+  // Ask showed "Stopped." Deferring the start lets that cleanup cancel the
+  // timer before any CLI process is spawned.
   useEffect(() => {
-    const key = `${sessionId}:${model}`;
-    if (started.current === key) return;
-    started.current = key;
-    stream.run({
-      prompt: props.prompt,
-      model,
-      sessionId,
-      systemPrompt: props.systemPrompt,
-    });
+    const timer = setTimeout(() => {
+      stream.run({
+        prompt: props.prompt,
+        model,
+        sessionId,
+        systemPrompt: props.systemPrompt,
+      });
+    }, 0);
+    return () => clearTimeout(timer);
   }, [sessionId, model]);
 
   const regenerate = (m = model) => {
