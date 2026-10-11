@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { useCallback, useEffect, useState } from "react";
 import { childEnv, resolveClaudeBinary, workDir } from "./claude";
+import { fetchCodexModels } from "./codex";
+import { providerOf } from "./provider";
 import {
   availableModels,
   loadCatalog,
@@ -116,13 +118,29 @@ function normalize(models: CliModel[]): ModelOption[] {
   return out;
 }
 
+// Both CLIs are asked in parallel; a missing or failing one just contributes
+// no models. Claude models come first.
 export async function refreshCatalog(
   force = false,
 ): Promise<ModelCatalog | undefined> {
   const cached = loadCatalog();
   if (!force && cached && Date.now() - cached.fetchedAt < MAX_AGE_MS)
     return cached;
-  const models = await fetchCliModels();
+  const [claude, codex] = await Promise.allSettled([
+    resolveClaudeBinary() ? fetchCliModels() : Promise.resolve([]),
+    fetchCodexModels(),
+  ]);
+  if (claude.status === "rejected" && codex.status === "rejected")
+    throw claude.reason;
+  const models = [
+    ...(claude.status === "fulfilled"
+      ? claude.value
+      : (cached?.models.filter((m) => providerOf(m.value) === "claude") ?? [])),
+    ...(codex.status === "fulfilled"
+      ? codex.value
+      : (cached?.models.filter((m) => providerOf(m.value) === "codex") ?? [])),
+  ];
+  if (!models.length) throw new Error("No models found.");
   const catalog = { fetchedAt: Date.now(), models };
   saveCatalog(catalog);
   return catalog;

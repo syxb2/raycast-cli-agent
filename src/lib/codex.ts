@@ -1,0 +1,249 @@
+import { environment, getPreferenceValues } from "@raycast/api";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, userInfo } from "node:os";
+import { join } from "node:path";
+import { createInterface } from "node:readline";
+import { CODEX_PREFIX, codexModelId } from "./provider";
+import { ModelError, RunOptions, RunResult, systemPrompt } from "./types";
+
+// Codex ships inside the ChatGPT app, so that is checked too.
+export function resolveCodexBinary(): string | undefined {
+  const custom = getPreferenceValues<Preferences>().codexPath?.trim();
+  const candidates = custom
+    ? [custom.replace(/^~(?=\/)/, homedir())]
+    : [
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        join(homedir(), ".local/bin/codex"),
+        join(homedir(), ".npm-global/bin/codex"),
+        join(homedir(), ".bun/bin/codex"),
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+      ];
+  return candidates.find((p) => existsSync(p));
+}
+
+function codexEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const { username } = userInfo();
+  env.USER ??= username;
+  env.LOGNAME ??= username;
+  // An API key in the environment would take precedence over the ChatGPT login.
+  delete env.OPENAI_API_KEY;
+  return env;
+}
+
+function workDir(): string {
+  const dir = join(environment.supportPath, "codex");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Codex assigns its own thread ids, so our session ids are mapped to them.
+function threadsFile(): string {
+  return join(workDir(), "threads.json");
+}
+
+function loadThreads(): Record<string, string> {
+  try {
+    return JSON.parse(readFileSync(threadsFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveThread(sessionId: string, threadId: string) {
+  writeFileSync(
+    threadsFile(),
+    JSON.stringify({ ...loadThreads(), [sessionId]: threadId }),
+  );
+}
+
+export function hasCodexThread(sessionId: string): boolean {
+  return Boolean(loadThreads()[sessionId]);
+}
+
+// Error messages can be a JSON document from the API wrapped in a string.
+function readableMessage(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.error?.message ?? parsed?.message ?? raw;
+  } catch {
+    return raw;
+  }
+}
+
+function classify(message: string): ModelError {
+  if (/401|unauthori[sz]ed|not logged in|login|auth/i.test(message)) {
+    return { kind: "not-logged-in", message, provider: "codex" };
+  }
+  if (/usage limit|rate.?limit|429|quota/i.test(message)) {
+    return { kind: "usage-limit", message, provider: "codex" };
+  }
+  return { kind: "other", message, provider: "codex" };
+}
+
+const COMMON_ARGS = [
+  "--json",
+  "--skip-git-repo-check",
+  "--ignore-user-config",
+  "--ignore-rules",
+];
+
+// `codex exec --json` reports a finished message, not text deltas, so the
+// answer arrives in one piece (measured 2026-10-11: ~4.5 s with GPT-5.6-Luna).
+export function runCodex(opts: RunOptions): Promise<RunResult> {
+  const bin = resolveCodexBinary();
+  if (!bin) {
+    return Promise.resolve({
+      text: "",
+      isError: true,
+      error: {
+        kind: "not-installed",
+        message: "Codex CLI not found.",
+        provider: "codex",
+      },
+    });
+  }
+
+  const model = codexModelId(opts.model ?? CODEX_PREFIX);
+  const thread = opts.sessionId ? loadThreads()[opts.sessionId] : undefined;
+  const instructions = `developer_instructions=${JSON.stringify(opts.systemPrompt ?? systemPrompt())}`;
+  const args = thread
+    ? ["exec", "resume", thread, ...COMMON_ARGS, "-c", instructions]
+    : [
+        "exec",
+        ...COMMON_ARGS,
+        "-s",
+        "read-only",
+        "-c",
+        instructions,
+        ...(opts.sessionId ? [] : ["--ephemeral"]),
+      ];
+  if (model) args.push("-m", model);
+  args.push("-"); // prompt from stdin
+
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const child = spawn(bin, args, {
+      cwd: workDir(),
+      env: codexEnv(),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    child.stdin.end(opts.prompt);
+
+    let text = "";
+    let failure: string | undefined;
+    let stderr = "";
+    let cancelled = false;
+
+    const onAbort = () => {
+      cancelled = true;
+      child.kill("SIGINT");
+    };
+    if (opts.signal?.aborted) onAbort();
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+
+    createInterface({ input: child.stdout }).on("line", (line) => {
+      let event: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+      try {
+        event = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (event.type === "thread.started" && opts.sessionId && !thread) {
+        saveThread(opts.sessionId, event.thread_id);
+      } else if (
+        event.type === "item.completed" &&
+        event.item?.type === "agent_message"
+      ) {
+        text = text ? `${text}\n\n${event.item.text}` : event.item.text;
+        opts.onText?.(text);
+      } else if (event.type === "turn.failed") {
+        failure = readableMessage(
+          event.error?.message ?? "Codex request failed.",
+        );
+      } else if (event.type === "error" && !failure) {
+        failure = readableMessage(event.message ?? "Codex request failed.");
+      }
+    });
+    child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+
+    child.on("error", (err) => {
+      resolve({
+        text,
+        isError: true,
+        error: { kind: "other", message: err.message, provider: "codex" },
+      });
+    });
+
+    child.on("close", (code) => {
+      opts.signal?.removeEventListener("abort", onAbort);
+      const durationMs = Date.now() - started;
+      if (cancelled) {
+        resolve({
+          text,
+          isError: true,
+          error: { kind: "cancelled", message: "Stopped.", provider: "codex" },
+        });
+        return;
+      }
+      if (failure || (code !== 0 && !text)) {
+        const message = (
+          failure ||
+          stderr.split("\n").filter(Boolean).pop() ||
+          `codex exited with code ${code}`
+        ).trim();
+        resolve({ text, isError: true, error: classify(message), durationMs });
+        return;
+      }
+      resolve({ text, isError: false, durationMs });
+    });
+  });
+}
+
+export interface CodexModel {
+  value: string;
+  title: string;
+  description?: string;
+}
+
+// `codex debug models` prints the model catalog for the signed-in account.
+export function fetchCodexModels(): Promise<CodexModel[]> {
+  const bin = resolveCodexBinary();
+  if (!bin) return Promise.resolve([]);
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, ["debug", "models"], {
+      cwd: workDir(),
+      env: codexEnv(),
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    const timer = setTimeout(() => child.kill(), 15_000);
+    child.stdout.on("data", (c) => (out += c.toString()));
+    child.on("error", reject);
+    child.on("close", () => {
+      clearTimeout(timer);
+      try {
+        const models: {
+          slug?: string;
+          display_name?: string;
+          description?: string;
+          visibility?: string;
+        }[] = JSON.parse(out).models ?? [];
+        resolve(
+          models
+            .filter((m) => m.slug && m.visibility === "list")
+            .map((m) => ({
+              value: `${CODEX_PREFIX}${m.slug}`,
+              title: m.display_name || m.slug!,
+              description: m.description,
+            })),
+        );
+      } catch {
+        reject(new Error("Could not read the Codex model list."));
+      }
+    });
+  });
+}

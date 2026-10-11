@@ -5,51 +5,13 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { currentModel } from "./models";
-
-export interface RateLimit {
-  fiveHour?: { utilization: number; resetsAt: number };
-  sevenDay?: { utilization: number; resetsAt: number };
-}
-
-export interface RunOptions {
-  prompt: string;
-  model?: string;
-  systemPrompt?: string;
-  // Multi-turn chat: --session-id if the session is not on disk yet, else --resume.
-  sessionId?: string;
-  signal?: AbortSignal;
-  onText?: (fullText: string) => void;
-}
-
-export interface RunResult {
-  text: string;
-  isError: boolean;
-  error?: ClaudeError;
-  rateLimit?: RateLimit;
-  durationMs?: number;
-}
-
-export type ClaudeErrorKind =
-  "not-installed" | "not-logged-in" | "usage-limit" | "cancelled" | "other";
-
-export interface ClaudeError {
-  kind: ClaudeErrorKind;
-  message: string;
-}
-
-const DEFAULT_SYSTEM_PROMPT = [
-  "You are a concise assistant invoked from Raycast.",
-  "Reply in the language the user writes in.",
-  "Skip filler and preambles; get straight to the answer.",
-  "Use Markdown when helpful; use fenced code blocks with a language tag for code.",
-].join(" ");
-
-export function systemPrompt(base = DEFAULT_SYSTEM_PROMPT): string {
-  const extra = getPreferenceValues<Preferences>().extraInstructions?.trim();
-  return extra
-    ? `${base}\n\nAdditional instructions from the user: ${extra}`
-    : base;
-}
+import {
+  ModelError,
+  RateLimit,
+  RunOptions,
+  RunResult,
+  systemPrompt,
+} from "./types";
 
 // Raycast's Node process does not inherit the shell PATH; absolute paths only.
 export function resolveClaudeBinary(): string | undefined {
@@ -118,18 +80,18 @@ function sessionExists(sessionId: string): boolean {
   }
 }
 
-export function classifyError(message: string): ClaudeError {
+function classifyError(message: string): ModelError {
   if (
     /not logged in|login expired|\/login|invalid api key|authentication/i.test(
       message,
     )
   ) {
-    return { kind: "not-logged-in", message };
+    return { kind: "not-logged-in", message, provider: "claude" };
   }
   if (/hit your .*limit|usage limit|rate.?limit/i.test(message)) {
-    return { kind: "usage-limit", message };
+    return { kind: "usage-limit", message, provider: "claude" };
   }
-  return { kind: "other", message };
+  return { kind: "other", message, provider: "claude" };
 }
 
 function parseRateLimit(
@@ -147,7 +109,11 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     return Promise.resolve({
       text: "",
       isError: true,
-      error: { kind: "not-installed", message: "Claude Code CLI not found." },
+      error: {
+        kind: "not-installed",
+        message: "Claude Code CLI not found.",
+        provider: "claude",
+      },
     });
   }
 
@@ -237,7 +203,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
       resolve({
         text,
         isError: true,
-        error: { kind: "other", message: err.message },
+        error: { kind: "other", message: err.message, provider: "claude" },
       });
     });
 
@@ -247,7 +213,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         resolve({
           text,
           isError: true,
-          error: { kind: "cancelled", message: "Stopped." },
+          error: { kind: "cancelled", message: "Stopped.", provider: "claude" },
           rateLimit,
         });
         return;

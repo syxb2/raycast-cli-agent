@@ -31,19 +31,34 @@ else
   die "Raycast not found: https://raycast.com"
 fi
 
-# A missing Claude Code doesn't stop the install; the extension explains what
-# to do on first use.
+# Either CLI is enough; a missing one doesn't stop the install, the extension
+# explains what to do on first use.
 CLAUDE=""
 for c in "$HOME/.local/bin/claude" /opt/homebrew/bin/claude /usr/local/bin/claude; do
   [ -x "$c" ] && { CLAUDE="$c"; break; }
 done
 if [ -z "$CLAUDE" ]; then
-  warn "Claude Code not found. Install it: curl -fsSL https://claude.ai/install.sh | bash"
+  warn "Claude Code not found (optional). Install: curl -fsSL https://claude.ai/install.sh | bash"
 elif "$CLAUDE" auth status >/dev/null 2>&1; then
   ok "Claude Code installed and signed in"
 else
   warn "Claude Code is installed but not signed in. In a terminal: claude  →  /login"
 fi
+
+CODEX=""
+for c in /opt/homebrew/bin/codex /usr/local/bin/codex "$HOME/.local/bin/codex" "$HOME/.npm-global/bin/codex" \
+  "$HOME/.bun/bin/codex" /Applications/ChatGPT.app/Contents/Resources/codex /Applications/Codex.app/Contents/Resources/codex; do
+  [ -x "$c" ] && { CODEX="$c"; break; }
+done
+if [ -z "$CODEX" ]; then
+  warn "Codex not found (optional). Install: brew install codex"
+elif "$CODEX" login status >/dev/null 2>&1; then
+  ok "Codex installed and signed in ($CODEX)"
+else
+  warn "Codex is installed but not signed in. In a terminal: '$CODEX' login"
+fi
+
+[ -n "$CLAUDE$CODEX" ] || warn "Install at least one of Claude Code or Codex to use the extension."
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

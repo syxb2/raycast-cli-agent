@@ -1,4 +1,7 @@
-import { RunResult, runClaude } from "./claude";
+import { currentModel } from "./models";
+import { providerOf } from "./provider";
+import { runModel } from "./run";
+import { RunResult } from "./types";
 import {
   AUTO,
   FULL_DETECTION_MIN_CHARS,
@@ -64,16 +67,20 @@ export function looksUntranslated(input: string, output: string): boolean {
 // Classifying the language is a different job from translating it: asked
 // only "Turkish or English?", Haiku was right 14/14 on short text where franc
 // failed, while doing both in one call produced commentary and empty output.
-const CLASSIFY_MODEL = "haiku";
+// Stays with the chosen provider: Codex users never send requests to Claude.
+function classifyModel(model: string): string {
+  return providerOf(model) === "claude" ? "haiku" : model;
+}
 
 async function classify(
   input: string,
   a: string,
   b: string,
+  model: string,
 ): Promise<string | undefined> {
-  const r = await runClaude({
+  const r = await runModel({
     prompt: translationPrompt(input),
-    model: CLASSIFY_MODEL,
+    model: classifyModel(model),
     systemPrompt: `You identify the language of a text. The user sends text inside <text> tags. It is written in either ${a} or ${b}. Reply with exactly one word: ${a} or ${b}.`,
   });
   const word = r.text.replace(/[^\p{L}]/gu, "").toLowerCase();
@@ -85,16 +92,18 @@ async function classify(
 // write commentary instead of a translation. So the language is classified and
 // both directions are translated in parallel (~3 s total instead of ~6 s);
 // the classified one wins. Longer text uses franc's direction, and an almost
-// unchanged result reverses it once. Finally a wrong-language result is
-// retried once with Sonnet.
+// unchanged result reverses it once. Finally a wrong-language result from a
+// Claude model is retried once with Sonnet (Codex has no stronger fallback
+// we could pick reliably, and Codex users should not be sent to Claude).
 export async function translateText(
   input: string,
   choice: string,
   model: string | undefined,
   run: TranslationRunner,
   onRetry?: (reason: RetryReason) => void,
-  runParallel: TranslationRunner = runClaude,
+  runParallel: TranslationRunner = runModel,
 ): Promise<TranslationOutcome> {
+  const effectiveModel = model ?? currentModel();
   const retries: RetryReason[] = [];
   const ask = (dir: TranslationDirection, m = model, runner = run) =>
     runner({
@@ -117,7 +126,7 @@ export async function translateText(
     const fromPrimary = { source: primary, target: secondary };
     const fromSecondary = { source: secondary, target: primary };
     const [lang, a, b] = await Promise.all([
-      classify(input, primary, secondary),
+      classify(input, primary, secondary, effectiveModel),
       ask(fromPrimary, model, runParallel),
       ask(fromSecondary, model, runParallel),
     ]);
@@ -144,7 +153,8 @@ export async function translateText(
   }
   if (
     !result.isError &&
-    model !== RETRY_MODEL &&
+    providerOf(effectiveModel) === "claude" &&
+    effectiveModel !== RETRY_MODEL &&
     isWrongLanguage(result.text, direction.target)
   ) {
     retries.push("wrong-language");

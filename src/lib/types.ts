@@ -1,0 +1,49 @@
+import { getPreferenceValues } from "@raycast/api";
+import { Provider } from "./provider";
+
+export interface RateLimit {
+  fiveHour?: { utilization: number; resetsAt: number };
+  sevenDay?: { utilization: number; resetsAt: number };
+}
+
+export interface RunOptions {
+  prompt: string;
+  model?: string;
+  systemPrompt?: string;
+  // Multi-turn chat. Claude: --session-id, then --resume. Codex: the thread id
+  // recorded for this session, then `codex exec resume`.
+  sessionId?: string;
+  signal?: AbortSignal;
+  onText?: (fullText: string) => void;
+}
+
+export interface RunResult {
+  text: string;
+  isError: boolean;
+  error?: ModelError;
+  rateLimit?: RateLimit;
+  durationMs?: number;
+}
+
+export type ModelErrorKind =
+  "not-installed" | "not-logged-in" | "usage-limit" | "cancelled" | "other";
+
+export interface ModelError {
+  kind: ModelErrorKind;
+  message: string;
+  provider?: Provider;
+}
+
+const DEFAULT_SYSTEM_PROMPT = [
+  "You are a concise assistant invoked from Raycast.",
+  "Reply in the language the user writes in.",
+  "Skip filler and preambles; get straight to the answer.",
+  "Use Markdown when helpful; use fenced code blocks with a language tag for code.",
+].join(" ");
+
+export function systemPrompt(base = DEFAULT_SYSTEM_PROMPT): string {
+  const extra = getPreferenceValues<Preferences>().extraInstructions?.trim();
+  return extra
+    ? `${base}\n\nAdditional instructions from the user: ${extra}`
+    : base;
+}

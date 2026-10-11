@@ -2,9 +2,9 @@
 
 # CLI Assistant
 
-AI in Raycast without Raycast Pro: ask questions, chat, and fix, translate, summarize or explain selected text. Requests go through the [Claude Code](https://code.claude.com) CLI installed on your Mac and signed in with your own Claude account, so usage counts against your Claude plan, not Raycast AI credits.
+AI in Raycast without Raycast Pro: ask questions, chat, and fix, translate, summarize or explain selected text. Requests go through the [Claude Code](https://code.claude.com) or [Codex](https://github.com/openai/codex) CLI installed on your Mac and signed in with your own account, so usage counts against your Claude or ChatGPT plan, not Raycast AI credits. Use either one, or both side by side.
 
-> Not affiliated with, built by, or endorsed by Anthropic or Raycast.
+> Not affiliated with, built by, or endorsed by Anthropic, OpenAI or Raycast.
 
 ## Install
 
@@ -14,7 +14,7 @@ Paste into a terminal:
 curl -fsSL https://raw.githubusercontent.com/umitaltintas/raycast-cli-assistant/main/install.sh | bash
 ```
 
-No Node, npm or git needed. The script downloads the prebuilt extension (~50 KB) from the [latest release](https://github.com/umitaltintas/raycast-cli-assistant/releases/latest), puts it into Raycast's extensions folder and registers it with Raycast. It also checks that Claude Code is installed and signed in. **Run the same command again to update**; chats and settings are kept. To uninstall, press <kbd>⌘</kbd><kbd>K</kbd> on any of its commands in Raycast → *Uninstall Extension*.
+No Node, npm or git needed. The script downloads the prebuilt extension (~50 KB) from the [latest release](https://github.com/umitaltintas/raycast-cli-assistant/releases/latest), puts it into Raycast's extensions folder and registers it with Raycast. It also checks which of Claude Code and Codex are installed and signed in. **Run the same command again to update**; chats and settings are kept. To uninstall, press <kbd>⌘</kbd><kbd>K</kbd> on any of its commands in Raycast → *Uninstall Extension*.
 
 Then open the extension preferences and set your **Primary Language**.
 
@@ -37,12 +37,15 @@ Requires Node 22.22.2 or newer.
 ### Requirements
 
 - Raycast v2 on macOS
-- [Claude Code](https://code.claude.com/docs/en/quickstart), signed in with a paid Claude plan:
+- At least one of:
+  - [Claude Code](https://code.claude.com/docs/en/quickstart), signed in with a paid Claude plan:
 
-  ```bash
-  curl -fsSL https://claude.ai/install.sh | bash
-  claude   # then /login
-  ```
+    ```bash
+    curl -fsSL https://claude.ai/install.sh | bash
+    claude   # then /login
+    ```
+
+  - [Codex](https://github.com/openai/codex), signed in with a ChatGPT plan: `brew install codex`, then `codex login`. The ChatGPT app also ships a copy of Codex, which is found automatically.
 
 ## Commands
 
@@ -57,7 +60,7 @@ Requires Node 22.22.2 or newer.
 | **Translate and Replace** | Translates the selected text without opening a window and pastes it over the selection. |
 | **Summarize** · **Explain** | Summarize or explain the selected text (or the clipboard if nothing is selected), in your primary language. |
 
-**Choosing a model:** from the dropdown in the search bar in Chat and Translate, or with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> on an answer. The list is not hardcoded: it comes from the Claude Code CLI and matches your plan, so new models show up on their own. The chosen model is shared by all commands and remembered; switching mid-chat keeps the context.
+**Choosing a model:** from the dropdown in the search bar in Chat and Translate, or with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> on an answer. Models are grouped by CLI (Claude Code, Codex). The list is not hardcoded: it comes from the installed CLIs and matches your plans, so new models show up on their own. The chosen model is shared by all commands and remembered; switching mid-chat keeps the context, even across Claude and Codex.
 
 On an answer: <kbd>↵</kbd> paste to the active app, <kbd>⌘</kbd><kbd>↵</kbd> continue in chat, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> copy, <kbd>⌘</kbd><kbd>R</kbd> regenerate, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> ask another model, <kbd>⌘</kbd><kbd>.</kbd> stop.
 
@@ -70,11 +73,12 @@ Tips:
 
 | Preference | Description |
 | --- | --- |
-| Default Model | Haiku, Sonnet, Opus or Fable (aliases that always resolve to the newest version). A model you pick inside the extension overrides it. |
+| Default Model | Haiku, Sonnet, Opus or Fable (aliases that always resolve to the newest version), or Codex with its default model. A model you pick inside the extension overrides it. |
 | Primary Language | Your main language. Summaries and explanations of selected text are written in it, and Translate's Auto mode translates into it. |
 | Secondary Language | Translate's Auto mode translates text that is already in your primary language into this one. |
 | Extra Models | Comma-separated models missing from your plan's list (e.g. `claude-opus-5-5[1m]`). |
 | Claude CLI Path | Leave empty to try `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. |
+| Codex CLI Path | Leave empty to try Homebrew, `~/.local/bin`, npm and the copy bundled with the ChatGPT app. |
 | Extra Instructions | Appended to every request (tone, how to address you, etc.). |
 
 ## How it works
@@ -86,19 +90,21 @@ Every request runs `claude -p` in streaming (`stream-json`) mode. Claude Code is
 
 In my measurements this brings the time to the first answer from ~9 s down to ~3 s. `--bare` would be faster but only works with API keys and ignores Claude account logins.
 
+**Codex** runs as `codex exec --json` in a read-only sandbox with its own instructions (`developer_instructions`); follow-ups use `codex exec resume`. Compared with Claude Code it is slower (~4.5–5 s for a short answer in my tests), its answers arrive in one piece rather than streamed, and its coding-agent prompt can't be replaced, only extended. When you switch between Claude and Codex mid-chat, the turns the other CLI answered are sent along as context, since each keeps its own history.
+
 More details:
 
 - **Chats** are Claude Code sessions (`--session-id` / `--resume`). Their files are kept in the extension's own folder so they don't mix with your real projects.
-- **Model list:** asked from the CLI's control protocol (the `initialize` request also behind the Agent SDK's `supportedModels()`); no model call, ~1 s. The result is cached and refreshed daily in the background; if the CLI is unreachable a fallback list of aliases is used.
-- **Translation direction:** Auto mode is not left to the translation itself, which was unreliable. For longer text the extension detects the language with [franc](https://github.com/wooorm/franc) and sends one source and one target language; if the result comes back (almost) unchanged, the direction is reversed once. Short text is too ambiguous for franc ("benim adim ne" and "hello" were both misdetected), so a separate Haiku call only answers "primary or secondary?" while both directions are translated in parallel; the classified one is shown. That takes ~3 s, the same as a single translation.
-- **Wrong-language check:** if a translation comes back in the wrong language (Haiku sometimes does this, e.g. German → Turkish), it is retried once with Sonnet and the result is marked.
+- **Model list:** Claude models come from the CLI's control protocol (the `initialize` request also behind the Agent SDK's `supportedModels()`), Codex models from `codex debug models`; no model calls, ~1 s, both in parallel. The result is cached and refreshed daily in the background; if the CLI is unreachable a fallback list of aliases is used.
+- **Translation direction:** Auto mode is not left to the translation itself, which was unreliable. For longer text the extension detects the language with [franc](https://github.com/wooorm/franc) and sends one source and one target language; if the result comes back (almost) unchanged, the direction is reversed once. Short text is too ambiguous for franc ("benim adim ne" and "hello" were both misdetected), so a separate call (Haiku, or the chosen Codex model) only answers "primary or secondary?" while both directions are translated in parallel; the classified one is shown. That takes ~3 s, the same as a single translation.
+- **Wrong-language check:** if a translation from a Claude model comes back in the wrong language (Haiku sometimes does this, e.g. German → Turkish), it is retried once with Sonnet and the result is marked. Codex requests always stay on Codex.
 - **Proxy:** `--setting-sources ""` skips user settings, so `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` from `~/.claude/settings.json` are read by the extension and passed to the CLI.
 - **Raycast environment:** Raycast extension processes have no `USER` / `LOGNAME`; without them Claude Code can't find its Keychain login and says `Not logged in`. The extension sets them.
 - If `ANTHROPIC_API_KEY` is set, the CLI would use it instead of your subscription, so it is removed from the child process.
 
 ## Terms
 
-The extension does not collect, store or relay credentials. It only runs the unmodified Claude Code CLI that you installed, and sign-in happens through Anthropic's own flow. Your usage is subject to [Anthropic's terms](https://code.claude.com/docs/en/legal-and-compliance) and your plan's limits.
+The extension does not collect, store or relay credentials. It only runs the unmodified Claude Code or Codex CLI that you installed, and sign-in happens through Anthropic's or OpenAI's own flow. Your usage is subject to their terms ([Anthropic](https://code.claude.com/docs/en/legal-and-compliance), [OpenAI](https://openai.com/policies/)) and your plan's limits.
 
 ## License
 

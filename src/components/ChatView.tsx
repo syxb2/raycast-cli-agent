@@ -10,11 +10,14 @@ import { useEffect, useRef, useState } from "react";
 import { errorMarkdown } from "../lib/format";
 import {
   currentModel,
+  groupByProvider,
   matchingValue,
   modelLabel,
   setCurrentModel,
 } from "../lib/models";
+import { withMissingContext } from "../lib/chatContext";
 import { useModels } from "../lib/modelCatalog";
+import { PROVIDER_NAMES } from "../lib/provider";
 import {
   Conversation,
   Message,
@@ -22,7 +25,7 @@ import {
   saveConversation,
   titleFrom,
 } from "../lib/storage";
-import { useClaudeStream } from "../lib/useClaudeStream";
+import { useModelStream } from "../lib/useModelStream";
 import { HistoryView } from "./HistoryView";
 import { ErrorActions, STOP_SHORTCUT } from "./shared";
 
@@ -42,7 +45,7 @@ export function ChatView({
     conversation.messages.at(-1)?.id,
   );
   const [pendingId, setPendingId] = useState<string | undefined>();
-  const stream = useClaudeStream();
+  const stream = useModelStream();
   const catalog = useModels();
   const sentFirst = useRef(false);
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
@@ -69,7 +72,7 @@ export function ChatView({
     setPendingId(msg.id);
 
     const result = await stream.run({
-      prompt: q,
+      prompt: withMissingContext(conversation.messages, conversation.model, q),
       model: conversation.model,
       sessionId: conversation.sessionId,
     });
@@ -154,8 +157,19 @@ export function ChatView({
           value={matchingValue(conversation.model, catalog.models)}
           onChange={changeModel}
         >
-          {catalog.models.map((m) => (
-            <List.Dropdown.Item key={m.value} title={m.title} value={m.value} />
+          {groupByProvider(catalog.models).map((g) => (
+            <List.Dropdown.Section
+              key={g.provider}
+              title={PROVIDER_NAMES[g.provider]}
+            >
+              {g.models.map((m) => (
+                <List.Dropdown.Item
+                  key={m.value}
+                  title={m.title}
+                  value={m.value}
+                />
+              ))}
+            </List.Dropdown.Section>
           ))}
         </List.Dropdown>
       }

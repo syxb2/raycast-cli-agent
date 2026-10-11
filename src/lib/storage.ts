@@ -1,7 +1,7 @@
 import { environment, LocalStorage } from "@raycast/api";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RateLimit } from "./claude";
+import { RateLimit } from "./types";
 
 export interface Message {
   id: string;

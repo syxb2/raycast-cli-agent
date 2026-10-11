@@ -11,7 +11,7 @@ import { errorMarkdown, rateLimitLines } from "../lib/format";
 import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
-import { useClaudeStream } from "../lib/useClaudeStream";
+import { useModelStream } from "../lib/useModelStream";
 import { ChatView } from "./ChatView";
 import { ErrorActions, ModelSubmenu, STOP_SHORTCUT } from "./shared";
 
@@ -29,7 +29,7 @@ export function AnswerView(props: AnswerViewProps) {
   const [model, setModel] = useState(currentModel);
   // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
-  const stream = useClaudeStream();
+  const stream = useModelStream();
   const catalog = useModels();
 
   // Raycast wraps development extensions in React StrictMode, which mounts,
@@ -64,6 +64,7 @@ export function AnswerView(props: AnswerViewProps) {
       question: props.question,
       answer: stream.text,
       createdAt: Date.now(),
+      model,
     });
     await saveConversation(c);
     push(<ChatView initial={c} />);

@@ -5,7 +5,8 @@ import {
   showToast,
   Toast,
 } from "@raycast/api";
-import { RunResult, runClaude } from "./claude";
+import { runModel } from "./run";
+import { RunResult } from "./types";
 import { errorMarkdown } from "./format";
 import { REWRITE_SYSTEM_PROMPT } from "./prompts";
 import { readSourceText } from "./selection";
@@ -42,7 +43,7 @@ export async function rewriteSelection(
 
 export function rewriteWith(buildPrompt: (text: string) => string) {
   return (text: string) =>
-    runClaude({
+    runModel({
       prompt: buildPrompt(text),
       systemPrompt: REWRITE_SYSTEM_PROMPT,
     });

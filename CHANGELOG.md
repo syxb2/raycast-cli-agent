@@ -1,5 +1,13 @@
 # CLI Assistant Changelog
 
+## [Codex Support] - 2026-10-11
+
+- Codex CLI as a second provider, signed in with your ChatGPT plan; also found inside the ChatGPT app
+- Model menus group models by CLI; Codex models come from `codex debug models`
+- Chats continue across providers: turns answered by the other CLI are sent as context
+- Codex CLI Path preference; Default Model can be Codex's default model
+- install.sh checks both CLIs
+
 ## [Reliable Auto Direction for Short Text] - 2026-10-11
 
 - Short text in Auto mode: a separate Haiku call classifies the language while both directions are translated in parallel (~3 s); no more commentary when a short phrase was misdetected

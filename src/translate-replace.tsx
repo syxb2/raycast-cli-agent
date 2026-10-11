@@ -1,5 +1,5 @@
 import { LocalStorage } from "@raycast/api";
-import { runClaude } from "./lib/claude";
+import { runModel } from "./lib/run";
 import { AUTO, RETRY_MODEL } from "./lib/languages";
 import { modelLabel } from "./lib/models";
 import { rewriteSelection } from "./lib/rewrite";
@@ -15,7 +15,7 @@ export default async function Command() {
       text,
       language,
       undefined,
-      runClaude,
+      runModel,
       (reason) => {
         toast.title =
           reason === "reversed"

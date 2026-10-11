@@ -20,8 +20,8 @@ import { useModels } from "./lib/modelCatalog";
 import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
 import { readSourceText } from "./lib/selection";
 import { RetryReason, translateText } from "./lib/translation";
-import { useClaudeStream } from "./lib/useClaudeStream";
-import { RunResult } from "./lib/claude";
+import { useModelStream } from "./lib/useModelStream";
+import { RunResult } from "./lib/types";
 
 // Like Raycast's Translate: the search bar is the input and translation starts
 // when typing pauses. Each request takes ~3 s, so keystrokes are debounced
@@ -34,7 +34,7 @@ export default function Command() {
   const [language, setLanguage] = useState<string>();
   const [ready, setReady] = useState(false);
   const [model, setModel] = useState(currentModel);
-  const stream = useClaudeStream();
+  const stream = useModelStream();
   const catalog = useModels();
   const lastRequest = useRef("");
   const [retries, setRetries] = useState<RetryReason[]>([]);

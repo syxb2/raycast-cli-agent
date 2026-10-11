@@ -6,18 +6,24 @@ import {
   openExtensionPreferences,
 } from "@raycast/api";
 import { spawn } from "node:child_process";
-import { ClaudeError } from "../lib/claude";
-import { ModelOption, sameModel } from "../lib/models";
+import { ModelError } from "../lib/types";
+import { groupByProvider, ModelOption, sameModel } from "../lib/models";
+import { resolveCodexBinary } from "../lib/codex";
+import { Provider, PROVIDER_NAMES } from "../lib/provider";
 
-function openLoginInTerminal() {
+function loginCommand(provider: Provider | undefined): string {
+  if (provider === "codex") {
+    // Codex may only exist inside the ChatGPT app, so use the resolved path.
+    return `'${resolveCodexBinary() ?? "codex"}' login`;
+  }
+  return "claude /login";
+}
+
+function openLoginInTerminal(provider: Provider | undefined) {
+  const script = `tell application "Terminal" to do script ${JSON.stringify(loginCommand(provider))}`;
   spawn(
     "osascript",
-    [
-      "-e",
-      'tell application "Terminal" to activate',
-      "-e",
-      'tell application "Terminal" to do script "claude /login"',
-    ],
+    ["-e", 'tell application "Terminal" to activate', "-e", script],
     {
       detached: true,
       stdio: "ignore",
@@ -25,13 +31,13 @@ function openLoginInTerminal() {
   ).unref();
 }
 
-export function ErrorActions({ error }: { error: ClaudeError }) {
+export function ErrorActions({ error }: { error: ModelError }) {
   if (error.kind === "not-logged-in") {
     return (
       <Action
         title="Open Terminal for Login"
         icon={Icon.Terminal}
-        onAction={openLoginInTerminal}
+        onAction={() => openLoginInTerminal(error.provider)}
       />
     );
   }
@@ -70,15 +76,22 @@ export function ModelSubmenu(props: {
       icon={Icon.Switch}
       shortcut={MODEL_SHORTCUT}
     >
-      {props.models.map((m) => (
-        <Action
-          key={m.value}
-          title={m.title}
-          icon={
-            sameModel(m.value, props.current) ? Icon.Checkmark : Icon.Circle
-          }
-          onAction={() => props.onSelect(m.value)}
-        />
+      {groupByProvider(props.models).map((g) => (
+        <ActionPanel.Section
+          key={g.provider}
+          title={PROVIDER_NAMES[g.provider]}
+        >
+          {g.models.map((m) => (
+            <Action
+              key={m.value}
+              title={m.title}
+              icon={
+                sameModel(m.value, props.current) ? Icon.Checkmark : Icon.Circle
+              }
+              onAction={() => props.onSelect(m.value)}
+            />
+          ))}
+        </ActionPanel.Section>
       ))}
       <ActionPanel.Section>
         <Action

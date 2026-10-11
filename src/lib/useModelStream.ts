@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ClaudeError,
-  RunOptions,
-  RunResult,
-  RateLimit,
-  runClaude,
-} from "./claude";
+import { runModel } from "./run";
+import { ModelError, RateLimit, RunOptions, RunResult } from "./types";
 import { saveRateLimit } from "./storage";
 
 // A setState per delta makes Raycast visibly lag; buffer the text in a ref and
@@ -15,12 +10,12 @@ const FLUSH_MS = 80;
 export interface StreamState {
   text: string;
   isLoading: boolean;
-  error?: ClaudeError;
+  error?: ModelError;
   rateLimit?: RateLimit;
   durationMs?: number;
 }
 
-export function useClaudeStream() {
+export function useModelStream() {
   const [state, setState] = useState<StreamState>({
     text: "",
     isLoading: false,
@@ -48,7 +43,7 @@ export function useClaudeStream() {
         );
       }, FLUSH_MS);
 
-      const result = await runClaude({
+      const result = await runModel({
         ...opts,
         signal: ac.signal,
         onText: (t) => (buffer.current = t),

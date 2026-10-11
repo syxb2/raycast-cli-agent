@@ -1,4 +1,4 @@
-import { ClaudeError, RateLimit } from "./claude";
+import { ModelError, RateLimit } from "./types";
 
 function clock(epochSeconds: number): string {
   const d = new Date(epochSeconds * 1000);
@@ -30,12 +30,17 @@ export function rateLimitLines(
   return lines;
 }
 
-export function errorMarkdown(error: ClaudeError): string {
+export function errorMarkdown(error: ModelError): string {
+  const codex = error.provider === "codex";
   switch (error.kind) {
     case "not-installed":
-      return "## Claude Code CLI not found\n\nInstall it: `curl -fsSL https://claude.ai/install.sh | bash`\n\nIf it lives elsewhere, set **Claude CLI Path** in the extension preferences.";
+      return codex
+        ? "## Codex CLI not found\n\nInstall it: `brew install codex` (or `npm i -g @openai/codex`). The ChatGPT app also ships one.\n\nIf it lives elsewhere, set **Codex CLI Path** in the extension preferences."
+        : "## Claude Code CLI not found\n\nInstall it: `curl -fsSL https://claude.ai/install.sh | bash`\n\nIf it lives elsewhere, set **Claude CLI Path** in the extension preferences.";
     case "not-logged-in":
-      return `## Not logged in to Claude\n\nRun \`claude\` in a terminal and sign in with \`/login\`.\n\n\`\`\`\n${error.message}\n\`\`\``;
+      return codex
+        ? `## Not logged in to Codex\n\nRun \`codex login\` in a terminal and sign in with your ChatGPT account.\n\n\`\`\`\n${error.message}\n\`\`\``
+        : `## Not logged in to Claude\n\nRun \`claude\` in a terminal and sign in with \`/login\`.\n\n\`\`\`\n${error.message}\n\`\`\``;
     case "usage-limit":
       return `## Usage limit reached\n\n${error.message}`;
     case "cancelled":
