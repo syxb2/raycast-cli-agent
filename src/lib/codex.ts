@@ -1,5 +1,6 @@
 import { environment, getPreferenceValues } from "@raycast/api";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
@@ -84,12 +85,51 @@ function classify(message: string): ModelError {
   return { kind: "other", message, provider: "codex" };
 }
 
+// Codex adds ~13k tokens of coding-agent context to every request (skills
+// list, sandbox rules, tool descriptions). None of it is needed here; turning
+// it off brought a "Say hi" from ~17.6k to ~4.5k input tokens (2026-10-11).
+// Written as -c keys rather than --disable: an unknown --disable feature
+// aborts the run, an unknown -c key is ignored, so older/newer versions work.
+const TRIMMED_FEATURES = [
+  "apps",
+  "plugins",
+  "multi_agent",
+  "view_image",
+  "image_generation",
+  "goals",
+  "tool_suggest",
+  "skill_search",
+  "sleep_tool",
+  "browser_use",
+  "computer_use",
+];
+const TRIM_ARGS = [
+  "skills.include_instructions=false",
+  "include_permissions_instructions=false",
+  "include_apps_instructions=false",
+  "include_collaboration_mode_instructions=false",
+  "include_environment_context=false",
+  "tools.update_plan.enabled=false",
+  'web_search="disabled"',
+  ...TRIMMED_FEATURES.map((f) => `features.${f}=false`),
+].flatMap((kv) => ["-c", kv]);
+
 const COMMON_ARGS = [
   "--json",
   "--skip-git-repo-check",
   "--ignore-user-config",
   "--ignore-rules",
+  ...TRIM_ARGS,
 ];
+
+// The system prompt replaces Codex's base instructions; the setting takes a
+// file, one per distinct prompt.
+function instructionsArgs(prompt: string): string[] {
+  const hash = createHash("sha1").update(prompt).digest("hex").slice(0, 12);
+  const file = join(workDir(), `instructions-${hash}.md`);
+  if (!existsSync(file)) writeFileSync(file, prompt);
+  return ["-c", `model_instructions_file=${JSON.stringify(file)}`];
+}
 
 // `codex exec --json` reports a finished message, not text deltas, so the
 // answer arrives in one piece (measured 2026-10-11: ~4.5 s with GPT-5.6-Luna).
@@ -109,16 +149,15 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
 
   const model = codexModelId(opts.model ?? CODEX_PREFIX);
   const thread = opts.sessionId ? loadThreads()[opts.sessionId] : undefined;
-  const instructions = `developer_instructions=${JSON.stringify(opts.systemPrompt ?? systemPrompt())}`;
+  const instructions = instructionsArgs(opts.systemPrompt ?? systemPrompt());
   const args = thread
-    ? ["exec", "resume", thread, ...COMMON_ARGS, "-c", instructions]
+    ? ["exec", "resume", thread, ...COMMON_ARGS, ...instructions]
     : [
         "exec",
         ...COMMON_ARGS,
         "-s",
         "read-only",
-        "-c",
-        instructions,
+        ...instructions,
         ...(opts.sessionId ? [] : ["--ephemeral"]),
       ];
   if (model) args.push("-m", model);

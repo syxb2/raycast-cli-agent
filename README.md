@@ -90,7 +90,7 @@ Every request runs `claude -p` in streaming (`stream-json`) mode. Claude Code is
 
 In my measurements this brings the time to the first answer from ~9 s down to ~3 s. `--bare` would be faster but only works with API keys and ignores Claude account logins.
 
-**Codex** runs as `codex exec --json` in a read-only sandbox with its own instructions (`developer_instructions`); follow-ups use `codex exec resume`. Compared with Claude Code it is slower (~4.5–5 s for a short answer in my tests), its answers arrive in one piece rather than streamed, and its coding-agent prompt can't be replaced, only extended. When you switch between Claude and Codex mid-chat, the turns the other CLI answered are sent along as context, since each keeps its own history.
+**Codex** runs as `codex exec --json` in a read-only sandbox; follow-ups use `codex exec resume`. Its coding-agent prompt is replaced with the assistant prompt (`model_instructions_file`), and the skills list, sandbox rules, apps, plugins, web search and other agent tools are turned off, which cuts a short request from ~17.6k to ~4.5k input tokens. Compared with Claude Code it is slower (~4.5 s for a short answer in my tests, almost all of it the round trip to OpenAI) and its answers arrive in one piece rather than streamed. When you switch between Claude and Codex mid-chat, the turns the other CLI answered are sent along as context, since each keeps its own history.
 
 More details:
 

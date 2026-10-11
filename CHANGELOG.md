@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Leaner Codex Requests] - 2026-10-12
+
+- Codex requests use about a quarter of the tokens: the assistant prompt replaces Codex's coding-agent prompt, and skills, sandbox rules, apps, plugins, web search and other agent tools are left out
+
 ## [Codex Models After Update] - 2026-10-11
 
 - The model list is refreshed right away when an installed CLI has no models in the cached list, so Codex models show up after updating instead of a day later
