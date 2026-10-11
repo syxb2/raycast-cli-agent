@@ -13,14 +13,13 @@ import {
   AUTO,
   autoLabel,
   LANGUAGES,
-  isWrongLanguage,
   resolveTranslation,
   RETRY_MODEL,
 } from "./lib/languages";
 import { useModels } from "./lib/modelCatalog";
 import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
-import { translateSystemPrompt, translationPrompt } from "./lib/prompts";
 import { readSourceText } from "./lib/selection";
+import { RetryReason, translateText } from "./lib/translation";
 import { useClaudeStream } from "./lib/useClaudeStream";
 
 // Like Raycast's Translate: the search bar is the input and translation starts
@@ -37,7 +36,8 @@ export default function Command() {
   const stream = useClaudeStream();
   const catalog = useModels();
   const lastRequest = useRef("");
-  const [retriedWith, setRetriedWith] = useState<string>();
+  const [retries, setRetries] = useState<RetryReason[]>([]);
+  const [target, setTarget] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -65,23 +65,27 @@ export default function Command() {
     if (key === lastRequest.current) return;
     const t = setTimeout(async () => {
       lastRequest.current = key;
-      setRetriedWith(undefined);
-      const direction = resolveTranslation(input, language);
-      const request = {
-        prompt: translationPrompt(input),
-        systemPrompt: translateSystemPrompt(direction),
-      };
-      const result = await stream.run({ ...request, model });
-      // One retry with a stronger model if the output is in the wrong language.
-      if (
-        lastRequest.current === key &&
-        !result.isError &&
-        model !== RETRY_MODEL &&
-        isWrongLanguage(result.text, direction.target)
-      ) {
-        setRetriedWith(RETRY_MODEL);
-        await stream.run({ ...request, model: RETRY_MODEL });
-      }
+      setRetries([]);
+      setTarget(resolveTranslation(input, language).target);
+      const outcome = await translateText(
+        input,
+        language,
+        model,
+        // A newer request owns the stream; a stale chain must not start more runs.
+        (request) =>
+          lastRequest.current === key
+            ? stream.run(request)
+            : Promise.resolve({
+                text: "",
+                isError: true,
+                error: { kind: "cancelled", message: "Stale." },
+              }),
+        (reason) => {
+          if (lastRequest.current !== key) return;
+          setRetries((r) => [...r, reason]);
+        },
+      );
+      if (lastRequest.current === key) setTarget(outcome.direction.target);
     }, DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [text, language, model, ready]);
@@ -98,8 +102,6 @@ export default function Command() {
 
   const translation = stream.text.trim();
   const hasInput = text.trim().length > 0;
-  const target =
-    hasInput && language ? resolveTranslation(text, language).target : "";
   const markdown =
     stream.error && !translation
       ? errorMarkdown(stream.error)
@@ -142,12 +144,8 @@ export default function Command() {
         />
       ) : (
         <List.Item
-          title={`→ ${target}`}
-          subtitle={
-            retriedWith
-              ? `${modelLabel(retriedWith)} (retried: wrong language)`
-              : modelLabel(model)
-          }
+          title={target ? `→ ${target}` : ""}
+          subtitle={subtitle(model, retries)}
           icon={Icon.Globe}
           detail={<List.Item.Detail markdown={markdown} />}
           actions={
@@ -186,4 +184,14 @@ export default function Command() {
       )}
     </List>
   );
+}
+
+function subtitle(model: string, retries: RetryReason[]): string {
+  const notes = retries.map((r) =>
+    r === "reversed" ? "reversed direction" : "wrong language",
+  );
+  const used = retries.includes("wrong-language") ? RETRY_MODEL : model;
+  return notes.length
+    ? `${modelLabel(used)} (retried: ${notes.join(", ")})`
+    : modelLabel(used);
 }

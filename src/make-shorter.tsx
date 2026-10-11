@@ -1,6 +1,6 @@
 import { rewritePrompts } from "./lib/prompts";
-import { rewriteSelection } from "./lib/rewrite";
+import { rewriteSelection, rewriteWith } from "./lib/rewrite";
 
 export default async function Command() {
-  await rewriteSelection(rewritePrompts.makeShorter, "Shortened");
+  await rewriteSelection(rewriteWith(rewritePrompts.makeShorter), "Shortened");
 }

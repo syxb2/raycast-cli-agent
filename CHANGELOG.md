@@ -1,5 +1,10 @@
 # CLI Assistant Changelog
 
+## [Reverse Misdetected Translations] - 2026-10-11
+
+- In Auto mode, a translation that comes back (almost) unchanged means the language was misdetected (common for short text without accents, e.g. "benim adim ne"); the direction is reversed and the text translated again
+- Translate and Translate and Replace share the same translation logic
+
 ## [Fix Ask Showing "Stopped."] - 2026-10-11
 
 - Ask AI (and Chat opened with a question) no longer stops right away. Raycast runs development extensions in React StrictMode, whose simulated unmount aborted the request before it could restart
