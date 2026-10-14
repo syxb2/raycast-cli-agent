@@ -36,9 +36,13 @@ import { ErrorActions, OptionActions, STOP_SHORTCUT } from "./shared";
 export function ChatView({
   initial,
   firstQuestion,
+  autoRun,
 }: {
   initial?: Conversation;
   firstQuestion?: string;
+  // A command approved before the chat opened (on an Ask AI answer); it is
+  // run against the last message right away.
+  autoRun?: string;
 }) {
   const { push } = useNavigation();
   const [conversation, setConversation] = useState<Conversation>(
@@ -116,6 +120,16 @@ export function ChatView({
     }, 0);
     return () => clearTimeout(timer);
   }, [firstQuestion]);
+
+  useEffect(() => {
+    const last = conversation.messages.at(-1);
+    if (!autoRun || !last || sentFirst.current) return;
+    const timer = setTimeout(() => {
+      sentFirst.current = true;
+      runCommand(last, autoRun);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [autoRun]);
 
   const startNew = () => {
     stream.stop();
@@ -372,7 +386,7 @@ function withoutCommands(c: Conversation, messageId: string): Conversation {
   };
 }
 
-function commandsMarkdown(commands: string[] | undefined): string {
+export function commandsMarkdown(commands: string[] | undefined): string {
   if (!commands?.length) return "";
   const blocks = commands.map((c) => `\`\`\`sh\n${c}\n\`\`\``).join("\n\n");
   const verb = commands.length === 1 ? "this command" : "these commands";

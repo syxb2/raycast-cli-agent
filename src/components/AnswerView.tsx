@@ -13,7 +13,7 @@ import { useModels } from "../lib/modelCatalog";
 import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
-import { ChatView } from "./ChatView";
+import { ChatView, commandsMarkdown } from "./ChatView";
 import {
   ErrorActions,
   ModelSubmenu,
@@ -28,7 +28,7 @@ export interface AnswerViewProps {
   question: string;
   systemPrompt?: string;
   navigationTitle?: string;
-  // Web search, effort, readable folders. Shell commands are chat-only.
+  // Web search, effort, tools or readable folders.
   options?: RequestOptions;
 }
 
@@ -56,7 +56,6 @@ export function AnswerView(props: AnswerViewProps) {
         sessionId,
         systemPrompt: props.systemPrompt,
         ...options,
-        tools: undefined,
       });
     }, 0);
     return () => clearTimeout(timer);
@@ -73,11 +72,12 @@ export function AnswerView(props: AnswerViewProps) {
     setSessionId(crypto.randomUUID());
   };
 
-  const continueInChat = async () => {
+  // An approved command continues in Chat, which runs it and keeps going.
+  const continueInChat = async (command?: string) => {
     // Readable folders (Finder selection) stay readable in the chat.
     const c = newConversation(model, {
       ...options,
-      tools: defaultOptions().tools,
+      tools: options.tools || defaultOptions().tools,
     });
     c.sessionId = sessionId;
     c.title = titleFrom(props.question);
@@ -87,16 +87,18 @@ export function AnswerView(props: AnswerViewProps) {
       answer: stream.text,
       createdAt: Date.now(),
       model,
+      commands: command ? undefined : stream.commands,
     });
     await saveConversation(c);
-    push(<ChatView initial={c} />);
+    push(<ChatView initial={c} autoRun={command} />);
   };
 
   const body =
     stream.error && !stream.text
       ? errorMarkdown(stream.error)
       : stream.text || "_Thinking…_";
-  const markdown = `**${escape(props.question)}**\n\n---\n\n${body}`;
+  const commands = stream.isLoading ? undefined : stream.commands;
+  const markdown = `**${escape(props.question)}**\n\n---\n\n${commands?.length && !stream.text ? "" : body}${commandsMarkdown(commands)}`;
   const done = !stream.isLoading && !stream.error && stream.text.length > 0;
 
   return (
@@ -140,13 +142,29 @@ export function AnswerView(props: AnswerViewProps) {
               onAction={stream.stop}
             />
           ) : null}
+          {commands?.length ? (
+            <ActionPanel.Section>
+              {commands.map((c) => (
+                <Action
+                  key={c}
+                  title={
+                    commands.length === 1
+                      ? "Run Command"
+                      : `Run ${c.length > 40 ? `${c.slice(0, 39)}…` : c}`
+                  }
+                  icon={Icon.Terminal}
+                  onAction={() => continueInChat(c)}
+                />
+              ))}
+            </ActionPanel.Section>
+          ) : null}
           {done ? (
             <>
               <Action.Paste title="Paste to Active App" content={stream.text} />
               <Action
                 title="Continue in Chat"
                 icon={Icon.Bubble}
-                onAction={continueInChat}
+                onAction={() => continueInChat()}
               />
               <Action.CopyToClipboard
                 title="Copy Answer"
@@ -171,7 +189,11 @@ export function AnswerView(props: AnswerViewProps) {
                 onSelect={regenerate}
                 onRefresh={() => catalog.refresh(true)}
               />
-              <OptionActions options={options} onChange={changeOptions} />
+              <OptionActions
+                options={options}
+                onChange={changeOptions}
+                showTools={!options.readDirs}
+              />
             </>
           ) : null}
         </ActionPanel>

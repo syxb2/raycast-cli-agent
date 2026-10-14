@@ -13,6 +13,7 @@ export interface StreamState {
   error?: ModelError;
   rateLimit?: RateLimit;
   durationMs?: number;
+  commands?: string[];
 }
 
 export function useModelStream() {
@@ -58,6 +59,7 @@ export function useModelStream() {
           error: result.error,
           rateLimit: result.rateLimit,
           durationMs: result.durationMs,
+          commands: result.commands,
         });
       }
       return result;

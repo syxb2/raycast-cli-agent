@@ -382,9 +382,9 @@
     },
     {
       "name": "chatTools",
-      "title": "Tools in Chat",
-      "label": "Let chats read files and propose shell commands",
-      "description": "Default for new chats; toggle it in a chat with ⌘⇧T. Files are only read; every shell command is shown first and runs only after you approve it.",
+      "title": "Tools",
+      "label": "Let Ask AI and Chat read files and propose shell commands",
+      "description": "Default for Ask AI and new chats; toggle it with ⌘⇧T. Files are only read; a shell command that changes something is shown first and runs only after you approve it.",
       "type": "checkbox",
       "required": false,
       "default": false

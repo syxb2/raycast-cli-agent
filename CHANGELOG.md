@@ -1,5 +1,9 @@
 # CLI Assistant Changelog
 
+## [Tools in Ask AI] - 2026-10-14
+
+- The Tools option now works in Ask AI too (it showed "Tools" but had no tools); approving a command on an answer continues in Chat, which runs it
+
 ## [Web Search, Effort, Files and Shell] - 2026-10-14
 
 - Web search for Claude and Codex: a preference, ⌘⇧W in Chat, and "Enable Web Search" on answers to ask again with it

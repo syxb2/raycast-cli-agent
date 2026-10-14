@@ -92,7 +92,7 @@ On an answer: <kbd>↵</kbd> paste to the active app, <kbd>⌘</kbd><kbd>↵</kb
 | Option | Shortcut | What it does |
 | --- | --- | --- |
 | Web Search | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>W</kbd> | Lets the model search and open web pages. Slower: ~15–20 s with Claude, ~13 s with Codex. On an answer it asks again with search. |
-| Tools (Files and Shell) | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd> | Chat only. The model can read files in your home folder and propose shell commands. A command that changes something is shown first; <kbd>↵</kbd> runs it in your login shell and sends the output back, or *Dismiss Command*. Read-only commands (`ls`, `df`, `lsof`…) may run without asking, as in Claude Code and Codex's read-only sandbox. |
+| Tools (Files and Shell) | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd> | Ask AI and Chat. The model can read files in your home folder and propose shell commands. A command that changes something is shown first; <kbd>↵</kbd> runs it in your login shell and sends the output back, or *Dismiss Command*. On an Ask AI answer, approving continues in Chat. Read-only commands (`ls`, `df`, `lsof`…) may run without asking, as in Claude Code and Codex's read-only sandbox. |
 | Reasoning Effort | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd> | Low to Max. Short questions rarely need more than the default. |
 
 The navigation title shows what is on (e.g. *My chat · Web · Tools*). Translate and the rewrite commands always run without them, to stay fast.
@@ -110,7 +110,7 @@ Tips:
 | Primary Language | Your main language. Summaries and explanations of selected text are written in it, and Translate's Auto mode translates into it. |
 | Secondary Language | Translate's Auto mode translates text that is already in your primary language into this one. |
 | Web Search | Default for Ask AI and new chats. |
-| Tools in Chat | Default for new chats. |
+| Tools | Default for Ask AI and new chats. |
 | Reasoning Effort | Default effort; *CLI Default* leaves it to the CLI. |
 | Extra Models | Comma-separated models missing from your plan's list (e.g. `claude-opus-5-5[1m]`). |
 | Claude CLI Path | Leave empty to try `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. |
