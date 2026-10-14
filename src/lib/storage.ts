@@ -1,6 +1,7 @@
 import { environment, LocalStorage } from "@raycast/api";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { RequestOptions } from "./options";
 import { RateLimit } from "./types";
 
 export interface Message {
@@ -11,6 +12,8 @@ export interface Message {
   error?: string;
   // The model can change mid-chat; --resume keeps the context.
   model?: string;
+  // Shell commands the model asked to run, until approved or dismissed.
+  commands?: string[];
 }
 
 export interface Conversation {
@@ -22,6 +25,8 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   messages: Message[];
+  // Web search, effort and tools; can change mid-chat.
+  options?: RequestOptions;
 }
 
 // Chat contents live in files; LocalStorage only keeps a small index because
@@ -71,7 +76,10 @@ export async function deleteConversation(id: string): Promise<void> {
   await LocalStorage.setItem(INDEX_KEY, JSON.stringify(index));
 }
 
-export function newConversation(model: string): Conversation {
+export function newConversation(
+  model: string,
+  options?: RequestOptions,
+): Conversation {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
@@ -81,6 +89,7 @@ export function newConversation(model: string): Conversation {
     createdAt: now,
     updatedAt: now,
     messages: [],
+    options,
   };
 }
 

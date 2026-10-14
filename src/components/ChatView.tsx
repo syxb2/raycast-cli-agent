@@ -4,6 +4,8 @@ import {
   Icon,
   Keyboard,
   List,
+  showToast,
+  Toast,
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +19,9 @@ import {
 } from "../lib/models";
 import { withMissingContext } from "../lib/chatContext";
 import { useModels } from "../lib/modelCatalog";
+import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
 import { PROVIDER_NAMES } from "../lib/provider";
+import { commandResultPrompt, runApprovedCommand } from "../lib/shell";
 import {
   Conversation,
   Message,
@@ -27,7 +31,7 @@ import {
 } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
 import { HistoryView } from "./HistoryView";
-import { ErrorActions, STOP_SHORTCUT } from "./shared";
+import { ErrorActions, OptionActions, STOP_SHORTCUT } from "./shared";
 
 export function ChatView({
   initial,
@@ -38,7 +42,7 @@ export function ChatView({
 }) {
   const { push } = useNavigation();
   const [conversation, setConversation] = useState<Conversation>(
-    () => initial ?? newConversation(currentModel()),
+    () => initial ?? newConversation(currentModel(), defaultOptions()),
   );
   const [input, setInput] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -51,7 +55,13 @@ export function ChatView({
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
 
-  const send = async (question: string) => {
+  // `prompt` replaces the question for the model (approved command results);
+  // `from` is the conversation to continue when state isn't updated yet.
+  const send = async (
+    question: string,
+    prompt?: string,
+    from: Conversation = conversation,
+  ) => {
     const q = question.trim();
     if (!q || stream.isLoading) return;
     const msg: Message = {
@@ -62,9 +72,9 @@ export function ChatView({
       model: conversation.model,
     };
     const base: Conversation = {
-      ...conversation,
-      title: conversation.title || titleFrom(q),
-      messages: [...conversation.messages, msg],
+      ...from,
+      title: from.title || titleFrom(q),
+      messages: [...from.messages, msg],
     };
     setConversation(base);
     setInput("");
@@ -72,9 +82,10 @@ export function ChatView({
     setPendingId(msg.id);
 
     const result = await stream.run({
-      prompt: withMissingContext(conversation.messages, conversation.model, q),
-      model: conversation.model,
-      sessionId: conversation.sessionId,
+      prompt: withMissingContext(from.messages, from.model, prompt ?? q),
+      model: from.model,
+      sessionId: from.sessionId,
+      ...from.options,
     });
     const finished: Message = {
       ...msg,
@@ -83,6 +94,7 @@ export function ChatView({
         result.isError && !result.text
           ? errorMarkdown(result.error!)
           : undefined,
+      commands: result.commands,
     };
     const updated = {
       ...base,
@@ -107,7 +119,7 @@ export function ChatView({
 
   const startNew = () => {
     stream.stop();
-    const fresh = newConversation(conversation.model);
+    const fresh = newConversation(conversation.model, conversation.options);
     activeId.current = fresh.id;
     setPendingId(undefined);
     setConversation(fresh);
@@ -118,6 +130,33 @@ export function ChatView({
   const changeModel = (model: string) => {
     setCurrentModel(model);
     setConversation((c) => ({ ...c, model }));
+  };
+
+  const changeOptions = (options: RequestOptions) => {
+    const updated = { ...conversation, options };
+    setConversation(updated);
+    if (updated.messages.length) saveConversation(updated);
+  };
+
+  // The approved command runs here, not in the CLI; its output goes back as
+  // the next message.
+  const runCommand = async (m: Message, command: string) => {
+    const cleared = withoutCommands(conversation, m.id);
+    setConversation(cleared);
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title: "Running command…",
+      message: command,
+    });
+    const result = await runApprovedCommand(command);
+    toast.hide();
+    await send(`$ ${command}`, commandResultPrompt(command, result), cleared);
+  };
+
+  const dismissCommands = (m: Message) => {
+    const cleared = withoutCommands(conversation, m.id);
+    setConversation(cleared);
+    saveConversation(cleared);
   };
 
   const answerOf = (m: Message) => {
@@ -136,7 +175,10 @@ export function ChatView({
 
   return (
     <List
-      navigationTitle={conversation.title || "New Chat"}
+      navigationTitle={[
+        conversation.title || "New Chat",
+        ...optionBadges(conversation.options),
+      ].join(" · ")}
       isLoading={stream.isLoading}
       isShowingDetail={messages.length > 0}
       searchBarPlaceholder={
@@ -181,6 +223,11 @@ export function ChatView({
             onHistory={() => push(<HistoryView />)}
             onRefreshModels={() => catalog.refresh(true)}
           />
+          <OptionActions
+            options={conversation.options ?? {}}
+            onChange={changeOptions}
+            showTools
+          />
         </ActionPanel>
       }
     >
@@ -188,7 +235,11 @@ export function ChatView({
         <List.EmptyView
           icon={Icon.Bubble}
           title="New Chat"
-          description={`${modelLabel(conversation.model)} · Type a question and press ↵`}
+          description={[
+            modelLabel(conversation.model),
+            ...optionBadges(conversation.options),
+            "Type a question and press ↵",
+          ].join(" · ")}
         />
       ) : (
         messages.map((m) => {
@@ -203,16 +254,39 @@ export function ChatView({
                   ? Icon.ExclamationMark
                   : m.id === pendingId
                     ? Icon.CircleProgress
-                    : Icon.Message
+                    : m.commands?.length
+                      ? Icon.Terminal
+                      : Icon.Message
               }
               detail={
                 <List.Item.Detail
-                  markdown={`**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n${answer}${m.model ? `\n\n---\n\n_${modelLabel(m.model)}_` : ""}`}
+                  markdown={`**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n${answer}${commandsMarkdown(m.commands)}${m.model ? `\n\n---\n\n_${modelLabel(m.model)}_` : ""}`}
                 />
               }
               actions={
                 <ActionPanel>
                   {sendAction}
+                  {m.commands?.length && !stream.isLoading ? (
+                    <ActionPanel.Section>
+                      {m.commands.map((c) => (
+                        <Action
+                          key={c}
+                          title={
+                            m.commands!.length === 1
+                              ? "Run Command"
+                              : `Run ${c.length > 40 ? `${c.slice(0, 39)}…` : c}`
+                          }
+                          icon={Icon.Terminal}
+                          onAction={() => runCommand(m, c)}
+                        />
+                      ))}
+                      <Action
+                        title="Dismiss Command"
+                        icon={Icon.XMarkCircle}
+                        onAction={() => dismissCommands(m)}
+                      />
+                    </ActionPanel.Section>
+                  ) : null}
                   {m.answer ? (
                     <>
                       <Action.Paste
@@ -241,6 +315,11 @@ export function ChatView({
                     onNew={startNew}
                     onHistory={() => push(<HistoryView />)}
                     onRefreshModels={() => catalog.refresh(true)}
+                  />
+                  <OptionActions
+                    options={conversation.options ?? {}}
+                    onChange={changeOptions}
+                    showTools
                   />
                 </ActionPanel>
               }
@@ -282,4 +361,20 @@ function ChatActions({
       />
     </ActionPanel.Section>
   );
+}
+
+function withoutCommands(c: Conversation, messageId: string): Conversation {
+  return {
+    ...c,
+    messages: c.messages.map((m) =>
+      m.id === messageId ? { ...m, commands: undefined } : m,
+    ),
+  };
+}
+
+function commandsMarkdown(commands: string[] | undefined): string {
+  if (!commands?.length) return "";
+  const blocks = commands.map((c) => `\`\`\`sh\n${c}\n\`\`\``).join("\n\n");
+  const verb = commands.length === 1 ? "this command" : "these commands";
+  return `\n\n---\n\n**Wants to run ${verb}** (runs only if you approve it; ↵ or ⌘K):\n\n${blocks}`;
 }

@@ -56,6 +56,21 @@
       ]
     },
     {
+      "name": "ask-files",
+      "title": "Ask About Finder Selection",
+      "subtitle": "CLI Assistant",
+      "description": "Ask a question about the files or folders selected in Finder. The model can read them, nothing else.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "question",
+          "type": "text",
+          "placeholder": "Question",
+          "required": false
+        }
+      ]
+    },
+    {
       "name": "fix-grammar",
       "title": "Fix Spelling and Grammar",
       "subtitle": "CLI Assistant",
@@ -353,6 +368,58 @@
         {
           "title": "Vietnamese",
           "value": "Vietnamese"
+        }
+      ]
+    },
+    {
+      "name": "webSearch",
+      "title": "Web Search",
+      "label": "Search the web in Ask AI and Chat",
+      "description": "Default for new chats and Ask AI; toggle it in a chat with ⌘⇧W. Answers take longer (Claude ~20 s, Codex ~13 s).",
+      "type": "checkbox",
+      "required": false,
+      "default": false
+    },
+    {
+      "name": "chatTools",
+      "title": "Tools in Chat",
+      "label": "Let chats read files and propose shell commands",
+      "description": "Default for new chats; toggle it in a chat with ⌘⇧T. Files are only read; every shell command is shown first and runs only after you approve it.",
+      "type": "checkbox",
+      "required": false,
+      "default": false
+    },
+    {
+      "name": "effort",
+      "title": "Reasoning Effort",
+      "description": "How hard the model thinks. Higher is slower; short questions rarely need it. Change it in a chat with ⌘⇧E.",
+      "type": "dropdown",
+      "required": false,
+      "default": "",
+      "data": [
+        {
+          "title": "CLI Default",
+          "value": ""
+        },
+        {
+          "title": "Low",
+          "value": "low"
+        },
+        {
+          "title": "Medium",
+          "value": "medium"
+        },
+        {
+          "title": "High",
+          "value": "high"
+        },
+        {
+          "title": "Extra High",
+          "value": "xhigh"
+        },
+        {
+          "title": "Max",
+          "value": "max"
         }
       ]
     },

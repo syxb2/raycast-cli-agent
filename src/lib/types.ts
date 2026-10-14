@@ -1,4 +1,5 @@
 import { getPreferenceValues } from "@raycast/api";
+import { RequestOptions } from "./options";
 import { Provider } from "./provider";
 
 export interface RateLimit {
@@ -6,7 +7,7 @@ export interface RateLimit {
   sevenDay?: { utilization: number; resetsAt: number };
 }
 
-export interface RunOptions {
+export interface RunOptions extends RequestOptions {
   prompt: string;
   model?: string;
   systemPrompt?: string;
@@ -23,6 +24,8 @@ export interface RunResult {
   error?: ModelError;
   rateLimit?: RateLimit;
   durationMs?: number;
+  // Shell commands the model wants to run; they wait for the user's approval.
+  commands?: string[];
 }
 
 export type ModelErrorKind =

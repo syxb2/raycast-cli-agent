@@ -8,6 +8,7 @@ import {
 import { spawn } from "node:child_process";
 import { ModelError } from "../lib/types";
 import { groupByProvider, ModelOption, sameModel } from "../lib/models";
+import { EFFORTS, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
 import { Provider, PROVIDER_NAMES } from "../lib/provider";
 
@@ -106,5 +107,70 @@ export function ModelSubmenu(props: {
         />
       </ActionPanel.Section>
     </ActionPanel.Submenu>
+  );
+}
+
+export const WEB_SEARCH_SHORTCUT: Keyboard.Shortcut = {
+  modifiers: ["cmd", "shift"],
+  key: "w",
+};
+export const TOOLS_SHORTCUT: Keyboard.Shortcut = {
+  modifiers: ["cmd", "shift"],
+  key: "t",
+};
+export const EFFORT_SHORTCUT: Keyboard.Shortcut = {
+  modifiers: ["cmd", "shift"],
+  key: "e",
+};
+
+// Web search, tools and effort for the current chat or answer.
+export function OptionActions(props: {
+  options: RequestOptions;
+  onChange: (options: RequestOptions) => void;
+  showTools?: boolean;
+}) {
+  const { options, onChange } = props;
+  return (
+    <ActionPanel.Section title="Options">
+      <Action
+        title={options.webSearch ? "Disable Web Search" : "Enable Web Search"}
+        icon={Icon.Globe}
+        shortcut={WEB_SEARCH_SHORTCUT}
+        onAction={() =>
+          onChange({ ...options, webSearch: !options.webSearch || undefined })
+        }
+      />
+      {props.showTools ? (
+        <Action
+          title={
+            options.tools ? "Disable Tools" : "Enable Tools (Files and Shell)"
+          }
+          icon={Icon.Hammer}
+          shortcut={TOOLS_SHORTCUT}
+          onAction={() =>
+            onChange({ ...options, tools: !options.tools || undefined })
+          }
+        />
+      ) : null}
+      <ActionPanel.Submenu
+        title="Reasoning Effort"
+        icon={Icon.LightBulb}
+        shortcut={EFFORT_SHORTCUT}
+      >
+        <Action
+          title="CLI Default"
+          icon={options.effort ? Icon.Circle : Icon.Checkmark}
+          onAction={() => onChange({ ...options, effort: undefined })}
+        />
+        {EFFORTS.map((e) => (
+          <Action
+            key={e.value}
+            title={e.title}
+            icon={options.effort === e.value ? Icon.Checkmark : Icon.Circle}
+            onAction={() => onChange({ ...options, effort: e.value })}
+          />
+        ))}
+      </ActionPanel.Submenu>
+    </ActionPanel.Section>
   );
 }

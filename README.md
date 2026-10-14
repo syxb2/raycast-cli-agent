@@ -10,6 +10,8 @@ Claude and ChatGPT plans include a coding CLI: Claude Code and Codex. This Rayca
 - **Fix Spelling and Grammar**, **Improve Writing**, **Make Shorter**: rewrite the selection in place
 - **Translate** as you type, or **Translate and Replace** the selection with one hotkey
 - **Summarize** and **Explain** the selection
+- **Ask About Finder Selection**: questions about files and folders (PDFs, logs, code), read-only
+- Optional **web search**, **reasoning effort** and **tools** (read files, run shell commands after your approval), switchable mid-chat
 - Any model your plan offers (Haiku, Sonnet, Opus, GPT-5.6…), switchable mid-chat, even between Claude and Codex
 
 How it stays fast and cheap: the CLIs are coding agents, so the extension turns off their tools, MCP servers, settings files and agent prompts. That brings Claude Code's first answer from ~9 s to ~3 s and Codex's prompt from ~17.6k to ~4.5k tokens. Details in [How it works](#how-it-works).
@@ -75,6 +77,7 @@ Press <kbd>⌘</kbd><kbd>Space</kbd>, type "Ask AI", ask a question and the answ
 | **Chat** | A chat with follow-up questions. |
 | **Chat History** | Open or delete previous chats. |
 | **Ask About Selection** | Ask a question about the selected text. |
+| **Ask About Finder Selection** | Ask about the files or folders selected in Finder. The model can read them and nothing else. |
 | **Fix Spelling and Grammar** · **Improve Writing** · **Make Shorter** | Rewrite the selected text and paste the result over it. |
 | **Translate** | Translates as you type; selected text is filled in. The target language is remembered. |
 | **Translate and Replace** | Translates the selected text without opening a window and pastes it over the selection. |
@@ -83,6 +86,16 @@ Press <kbd>⌘</kbd><kbd>Space</kbd>, type "Ask AI", ask a question and the answ
 **Choosing a model:** from the dropdown in the search bar in Chat and Translate, or with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> on an answer. Models are grouped by CLI (Claude Code, Codex). The list is not hardcoded: it comes from the installed CLIs and matches your plans, so new models show up on their own. The chosen model is shared by all commands and remembered; switching mid-chat keeps the context, even across Claude and Codex.
 
 On an answer: <kbd>↵</kbd> paste to the active app, <kbd>⌘</kbd><kbd>↵</kbd> continue in chat, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> copy, <kbd>⌘</kbd><kbd>R</kbd> regenerate, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> ask another model, <kbd>⌘</kbd><kbd>.</kbd> stop.
+
+**Options**, in Chat and on answers, start from the preferences and are remembered per chat:
+
+| Option | Shortcut | What it does |
+| --- | --- | --- |
+| Web Search | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>W</kbd> | Lets the model search and open web pages. Slower: ~15–20 s with Claude, ~13 s with Codex. On an answer it asks again with search. |
+| Tools (Files and Shell) | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd> | Chat only. The model can read files in your home folder and propose shell commands. A command that changes something is shown first; <kbd>↵</kbd> runs it in your login shell and sends the output back, or *Dismiss Command*. Read-only commands (`ls`, `df`, `lsof`…) may run without asking, as in Claude Code and Codex's read-only sandbox. |
+| Reasoning Effort | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd> | Low to Max. Short questions rarely need more than the default. |
+
+The navigation title shows what is on (e.g. *My chat · Web · Tools*). Translate and the rewrite commands always run without them, to stay fast.
 
 Tips:
 
@@ -96,6 +109,9 @@ Tips:
 | Default Model | Haiku, Sonnet, Opus or Fable (aliases that always resolve to the newest version), or Codex with its default model. A model you pick inside the extension overrides it. |
 | Primary Language | Your main language. Summaries and explanations of selected text are written in it, and Translate's Auto mode translates into it. |
 | Secondary Language | Translate's Auto mode translates text that is already in your primary language into this one. |
+| Web Search | Default for Ask AI and new chats. |
+| Tools in Chat | Default for new chats. |
+| Reasoning Effort | Default effort; *CLI Default* leaves it to the CLI. |
 | Extra Models | Comma-separated models missing from your plan's list (e.g. `claude-opus-5-5[1m]`). |
 | Claude CLI Path | Leave empty to try `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. |
 | Codex CLI Path | Leave empty to try Homebrew, `~/.local/bin`, npm and the copy bundled with the ChatGPT app. |
@@ -111,6 +127,8 @@ Every request runs `claude -p` in streaming (`stream-json`) mode. Claude Code is
 In my measurements this brings the time to the first answer from ~9 s down to ~3 s. `--bare` would be faster but only works with API keys and ignores Claude account logins.
 
 **Codex** runs as `codex exec --json` in a read-only sandbox; follow-ups use `codex exec resume`. Its coding-agent prompt is replaced with the assistant prompt (`model_instructions_file`), and the skills list, sandbox rules, apps, plugins, web search and other agent tools are turned off, which cuts a short request from ~17.6k to ~4.5k input tokens. Compared with Claude Code it is slower (~4.5 s for a short answer in my tests, almost all of it the round trip to OpenAI) and its answers arrive in one piece rather than streamed. When you switch between Claude and Codex mid-chat, the turns the other CLI answered are sent along as context, since each keeps its own history.
+
+**Options** map to CLI flags. Claude: `--tools WebSearch,WebFetch`, `Read,Glob,Grep` with `--add-dir`, `Bash`, and `--effort`. Bash is never pre-approved: in `-p` mode a call that needs approval is denied and listed in `permission_denials`, so the extension shows that exact command and, once approved, runs it itself and sends the output as the next message. Codex: `web_search="live"`, `model_reasoning_effort`, and its shell in the read-only sandbox (turned off entirely when not needed, ~640 fewer tokens); commands the sandbox would block are asked for in an `approve` block and handled the same way.
 
 More details:
 

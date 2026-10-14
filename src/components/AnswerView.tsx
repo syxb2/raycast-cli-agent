@@ -10,10 +10,16 @@ import { useEffect, useState } from "react";
 import { errorMarkdown, rateLimitLines } from "../lib/format";
 import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
+import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
 import { ChatView } from "./ChatView";
-import { ErrorActions, ModelSubmenu, STOP_SHORTCUT } from "./shared";
+import {
+  ErrorActions,
+  ModelSubmenu,
+  OptionActions,
+  STOP_SHORTCUT,
+} from "./shared";
 
 export interface AnswerViewProps {
   // Full text sent to the model (may include the selection and instructions).
@@ -22,11 +28,16 @@ export interface AnswerViewProps {
   question: string;
   systemPrompt?: string;
   navigationTitle?: string;
+  // Web search, effort, readable folders. Shell commands are chat-only.
+  options?: RequestOptions;
 }
 
 export function AnswerView(props: AnswerViewProps) {
   const { push } = useNavigation();
   const [model, setModel] = useState(currentModel);
+  const [options, setOptions] = useState<RequestOptions>(
+    () => props.options ?? {},
+  );
   // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useModelStream();
@@ -44,6 +55,8 @@ export function AnswerView(props: AnswerViewProps) {
         model,
         sessionId,
         systemPrompt: props.systemPrompt,
+        ...options,
+        tools: undefined,
       });
     }, 0);
     return () => clearTimeout(timer);
@@ -55,8 +68,17 @@ export function AnswerView(props: AnswerViewProps) {
     setSessionId(crypto.randomUUID());
   };
 
+  const changeOptions = (o: RequestOptions) => {
+    setOptions(o);
+    setSessionId(crypto.randomUUID());
+  };
+
   const continueInChat = async () => {
-    const c = newConversation(model);
+    // Readable folders (Finder selection) stay readable in the chat.
+    const c = newConversation(model, {
+      ...options,
+      tools: defaultOptions().tools,
+    });
     c.sessionId = sessionId;
     c.title = titleFrom(props.question);
     c.messages.push({
@@ -86,6 +108,12 @@ export function AnswerView(props: AnswerViewProps) {
         !stream.isLoading ? (
           <Detail.Metadata>
             <Detail.Metadata.Label title="Model" text={modelLabel(model)} />
+            {optionBadges(options).length ? (
+              <Detail.Metadata.Label
+                title="Options"
+                text={optionBadges(options).join(" · ")}
+              />
+            ) : null}
             {stream.durationMs ? (
               <Detail.Metadata.Label
                 title="Duration"
@@ -143,6 +171,7 @@ export function AnswerView(props: AnswerViewProps) {
                 onSelect={regenerate}
                 onRefresh={() => catalog.refresh(true)}
               />
+              <OptionActions options={options} onChange={changeOptions} />
             </>
           ) : null}
         </ActionPanel>

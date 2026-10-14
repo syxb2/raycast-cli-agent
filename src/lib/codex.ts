@@ -110,9 +110,39 @@ const TRIM_ARGS = [
   "include_collaboration_mode_instructions=false",
   "include_environment_context=false",
   "tools.update_plan.enabled=false",
-  'web_search="disabled"',
   ...TRIMMED_FEATURES.map((f) => `features.${f}=false`),
 ].flatMap((kv) => ["-c", kv]);
+
+// Codex reads files through its shell, so the shell stays on for reading; the
+// read-only sandbox blocks writes. Without it, ~640 fewer input tokens.
+function optionArgs(opts: RunOptions): string[] {
+  const shell = opts.tools || Boolean(opts.readDirs?.length);
+  return [
+    `web_search=${opts.webSearch ? '"live"' : '"disabled"'}`,
+    ...(shell
+      ? []
+      : ["features.shell_tool=false", "features.unified_exec=false"]),
+    ...(opts.effort ? [`model_reasoning_effort="${opts.effort}"`] : []),
+  ].flatMap((kv) => ["-c", kv]);
+}
+
+// Commands the sandbox would block come back in this block (see below), so
+// they can be approved like Claude's denied Bash calls.
+const APPROVE_PROMPT = [
+  "Shell commands you run are in a read-only sandbox.",
+  "If the task needs a command that changes something (writes or deletes files, installs, stops processes), do not try it.",
+  "Instead end your reply with a fenced code block tagged `approve` that holds only that one command.",
+  "The user can approve it; you then get its output.",
+].join(" ");
+
+const APPROVE_BLOCK = /\n*```approve\n([\s\S]*?)\n?```\s*/g;
+
+function splitCommands(text: string): { text: string; commands: string[] } {
+  const commands = [...text.matchAll(APPROVE_BLOCK)]
+    .map((m) => m[1].trim())
+    .filter(Boolean);
+  return { text: text.replace(APPROVE_BLOCK, "\n").trim(), commands };
+}
 
 const COMMON_ARGS = [
   "--json",
@@ -149,7 +179,11 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
 
   const model = codexModelId(opts.model ?? CODEX_PREFIX);
   const thread = opts.sessionId ? loadThreads()[opts.sessionId] : undefined;
-  const instructions = instructionsArgs(opts.systemPrompt ?? systemPrompt());
+  const prompt = opts.systemPrompt ?? systemPrompt();
+  const instructions = [
+    ...instructionsArgs(opts.tools ? `${prompt}\n\n${APPROVE_PROMPT}` : prompt),
+    ...optionArgs(opts),
+  ];
   const args = thread
     ? ["exec", "resume", thread, ...COMMON_ARGS, ...instructions]
     : [
@@ -161,6 +195,8 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
         ...(opts.sessionId ? [] : ["--ephemeral"]),
       ];
   if (model) args.push("-m", model);
+  // Relative paths and "this folder" then mean the Finder selection.
+  if (opts.readDirs?.length) args.push("-C", opts.readDirs[0]);
   args.push("-"); // prompt from stdin
 
   return new Promise((resolve) => {
@@ -198,7 +234,7 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
         event.item?.type === "agent_message"
       ) {
         text = text ? `${text}\n\n${event.item.text}` : event.item.text;
-        opts.onText?.(text);
+        opts.onText?.(opts.tools ? splitCommands(text).text : text);
       } else if (event.type === "turn.failed") {
         failure = readableMessage(
           event.error?.message ?? "Codex request failed.",
@@ -237,7 +273,17 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
         resolve({ text, isError: true, error: classify(message), durationMs });
         return;
       }
-      resolve({ text, isError: false, durationMs });
+      if (!opts.tools) {
+        resolve({ text, isError: false, durationMs });
+        return;
+      }
+      const split = splitCommands(text);
+      resolve({
+        text: split.text,
+        isError: false,
+        durationMs,
+        commands: split.commands.length ? split.commands : undefined,
+      });
     });
   });
 }

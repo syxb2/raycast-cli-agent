@@ -103,6 +103,30 @@ function parseRateLimit(
   return { fiveHour: windows.five_hour, sevenDay: windows.seven_day };
 }
 
+// Web search ~20 s instead of ~2 s, file reading ~2.5 s (measured
+// 2026-10-14). Bash is offered but never pre-approved: in -p mode a call to it
+// is denied and comes back in permission_denials, so the extension can ask the
+// user and run the exact command itself.
+function toolArgs(opts: RunOptions): string[] {
+  const allowed: string[] = [];
+  if (opts.webSearch) allowed.push("WebSearch", "WebFetch");
+  const dirs = opts.tools ? [homedir()] : (opts.readDirs ?? []);
+  if (dirs.length) allowed.push("Read", "Glob", "Grep");
+  const tools = opts.tools ? [...allowed, "Bash"] : allowed;
+  const args = ["--tools", tools.join(",")];
+  if (allowed.length) args.push("--allowedTools", allowed.join(","));
+  for (const d of dirs) args.push("--add-dir", d);
+  if (opts.effort) args.push("--effort", opts.effort);
+  return args;
+}
+
+// Without it, a blocked command came with a paragraph of alternatives.
+const APPROVE_PROMPT = [
+  "Shell commands are shown to the user, who can approve them; a blocked command is the normal first step, not a failure.",
+  "When one is blocked, say in one short sentence what it will do. Do not suggest workarounds or other commands.",
+  "After approval you get its output.",
+].join(" ");
+
 export function runClaude(opts: RunOptions): Promise<RunResult> {
   const bin = resolveClaudeBinary();
   if (!bin) {
@@ -121,17 +145,19 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     "-p",
     "--model",
     opts.model ?? currentModel(),
-    // A chat assistant, not a coding agent: tools, MCP, settings files and
-    // slash commands are off. Time to answer drops from ~9 s to ~3 s
-    // (measured 2026-10-11). --bare is faster but ignores OAuth logins.
-    "--tools",
-    "",
+    // A chat assistant, not a coding agent: tools (unless asked for), MCP,
+    // settings files and slash commands are off. Time to answer drops from
+    // ~9 s to ~3 s (measured 2026-10-11). --bare is faster but ignores OAuth
+    // logins.
+    ...toolArgs(opts),
     "--strict-mcp-config",
     "--setting-sources",
     "",
     "--disable-slash-commands",
     "--system-prompt",
-    opts.systemPrompt ?? systemPrompt(),
+    opts.tools
+      ? `${opts.systemPrompt ?? systemPrompt()}\n\n${APPROVE_PROMPT}`
+      : (opts.systemPrompt ?? systemPrompt()),
     "--output-format",
     "stream-json",
     "--include-partial-messages",
@@ -161,6 +187,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     let resultIsError = false;
     let durationMs: number | undefined;
     let rateLimit: RateLimit | undefined;
+    let commands: string[] = [];
     let stderr = "";
     let cancelled = false;
 
@@ -180,6 +207,14 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         return;
       }
       if (event.type === "stream_event") {
+        // With tools there are several assistant messages per turn.
+        if (
+          event.event?.type === "message_start" &&
+          text &&
+          !/\n\n$/.test(text)
+        ) {
+          text += "\n\n";
+        }
         const delta = event.event?.delta;
         if (
           event.event?.type === "content_block_delta" &&
@@ -195,6 +230,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
           typeof event.result === "string" ? event.result : undefined;
         resultIsError = Boolean(event.is_error) || event.subtype !== "success";
         durationMs = event.duration_ms;
+        commands = deniedCommands(event.permission_denials);
       }
     });
     child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
@@ -236,7 +272,22 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         });
         return;
       }
-      resolve({ text: finalText, isError: false, rateLimit, durationMs });
+      resolve({
+        text: finalText,
+        isError: false,
+        rateLimit,
+        durationMs,
+        commands: commands.length ? commands : undefined,
+      });
     });
   });
+}
+
+function deniedCommands(denials: unknown): string[] {
+  if (!Array.isArray(denials)) return [];
+  const commands = denials
+    .filter((d) => d?.tool_name === "Bash")
+    .map((d) => d?.tool_input?.command)
+    .filter((c): c is string => typeof c === "string" && c.trim() !== "");
+  return [...new Set(commands)];
 }

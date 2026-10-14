@@ -1,5 +1,14 @@
 # CLI Assistant Changelog
 
+## [Web Search, Effort, Files and Shell] - 2026-10-14
+
+- Web search for Claude and Codex: a preference, ⌘⇧W in Chat, and "Enable Web Search" on answers to ask again with it
+- Reasoning effort (Low to Max): a preference and ⌘⇧E
+- Tools in Chat (⌘⇧T): the model can read files in your home folder and propose shell commands; each command that changes something waits for your approval and its output goes back into the chat
+- Ask About Finder Selection: ask about the selected files or folders; the model can only read them
+- Chat options are saved per chat and shown in the title
+- Codex's shell is turned off when no tools are needed (~640 fewer input tokens)
+
 ## [Ask AI from Spotlight] - 2026-10-12
 
 - `install.sh --spotlight` creates an Ask AI app that Spotlight finds; it answers with the model chosen in the extension, through Claude Code or Codex

@@ -1,6 +1,7 @@
 import { LaunchProps } from "@raycast/api";
 import { AnswerView } from "./components/AnswerView";
 import { ChatView } from "./components/ChatView";
+import { defaultOptions } from "./lib/options";
 
 // As a fallback command, the text typed in root search arrives as fallbackText.
 export default function Command(
@@ -8,5 +9,7 @@ export default function Command(
 ) {
   const prompt = (props.arguments.prompt || props.fallbackText || "").trim();
   if (!prompt) return <ChatView />;
-  return <AnswerView prompt={prompt} question={prompt} />;
+  return (
+    <AnswerView prompt={prompt} question={prompt} options={defaultOptions()} />
+  );
 }
