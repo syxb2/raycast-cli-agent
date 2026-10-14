@@ -8,6 +8,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { errorMarkdown, rateLimitLines } from "../lib/format";
+import { stepsMarkdown } from "../lib/steps";
 import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
 import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
@@ -87,6 +88,8 @@ export function AnswerView(props: AnswerViewProps) {
       answer: stream.text,
       createdAt: Date.now(),
       model,
+      steps: stream.steps,
+      durationMs: stream.durationMs,
       commands: command ? undefined : stream.commands,
     });
     await saveConversation(c);
@@ -96,9 +99,9 @@ export function AnswerView(props: AnswerViewProps) {
   const body =
     stream.error && !stream.text
       ? errorMarkdown(stream.error)
-      : stream.text || "_Thinking…_";
+      : stream.text || `_${modelLabel(model)} is thinking…_`;
   const commands = stream.isLoading ? undefined : stream.commands;
-  const markdown = `**${escape(props.question)}**\n\n---\n\n${commands?.length && !stream.text ? "" : body}${commandsMarkdown(commands)}`;
+  const markdown = `**${escape(props.question)}**\n\n---\n\n${stepsMarkdown(stream.steps)}${commands?.length && !stream.text ? "" : body}${commandsMarkdown(commands)}`;
   const done = !stream.isLoading && !stream.error && stream.text.length > 0;
 
   return (
@@ -119,7 +122,7 @@ export function AnswerView(props: AnswerViewProps) {
             {stream.durationMs ? (
               <Detail.Metadata.Label
                 title="Duration"
-                text={`${(stream.durationMs / 1000).toFixed(1)} sn`}
+                text={`${(stream.durationMs / 1000).toFixed(1)} s`}
               />
             ) : null}
             {rateLimitLines(stream.rateLimit).map((l) => (

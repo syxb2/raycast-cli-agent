@@ -1,5 +1,10 @@
 # CLI Assistant Changelog
 
+## [Show What the Model Does] - 2026-10-14
+
+- While answering, Ask AI and Chat show each step live (web searches, pages opened, files read, commands run) instead of only "Thinking…"; the steps stay above the answer, so commands that ran without asking are visible too
+- Answers in Chat end with one line: model and duration
+
 ## [Tools in Ask AI] - 2026-10-14
 
 - The Tools option now works in Ask AI too (it showed "Tools" but had no tools); approving a command on an answer continues in Chat, which runs it

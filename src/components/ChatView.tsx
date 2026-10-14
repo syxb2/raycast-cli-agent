@@ -9,7 +9,8 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useRef, useState } from "react";
-import { errorMarkdown } from "../lib/format";
+import { errorMarkdown, footerMarkdown } from "../lib/format";
+import { stepsMarkdown } from "../lib/steps";
 import {
   currentModel,
   groupByProvider,
@@ -99,6 +100,8 @@ export function ChatView({
           ? errorMarkdown(result.error!)
           : undefined,
       commands: result.commands,
+      steps: result.steps,
+      durationMs: result.durationMs,
     };
     const updated = {
       ...base,
@@ -173,9 +176,13 @@ export function ChatView({
     saveConversation(cleared);
   };
 
-  const answerOf = (m: Message) => {
-    if (m.id === pendingId) return stream.text || "_Thinking…_";
-    return m.error ?? m.answer;
+  // Pending: what the model is doing so far, then the text as it arrives.
+  const detailOf = (m: Message) => {
+    const question = `**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n`;
+    if (m.id === pendingId) {
+      return `${question}${stepsMarkdown(stream.steps)}${stream.text || `_${modelLabel(m.model ?? conversation.model)} is thinking…_`}`;
+    }
+    return `${question}${stepsMarkdown(m.steps)}${m.error ?? m.answer}${commandsMarkdown(m.commands)}${footerMarkdown(m.model, modelLabel, m.durationMs)}`;
   };
 
   const messages = [...conversation.messages].reverse();
@@ -257,7 +264,6 @@ export function ChatView({
         />
       ) : (
         messages.map((m) => {
-          const answer = answerOf(m);
           return (
             <List.Item
               key={m.id}
@@ -272,11 +278,7 @@ export function ChatView({
                       ? Icon.Terminal
                       : Icon.Message
               }
-              detail={
-                <List.Item.Detail
-                  markdown={`**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n${answer}${commandsMarkdown(m.commands)}${m.model ? `\n\n---\n\n_${modelLabel(m.model)}_` : ""}`}
-                />
-              }
+              detail={<List.Item.Detail markdown={detailOf(m)} />}
               actions={
                 <ActionPanel>
                   {sendAction}

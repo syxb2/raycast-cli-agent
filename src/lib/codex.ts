@@ -6,6 +6,7 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { CODEX_PREFIX, codexModelId } from "./provider";
+import { codexCommandStep, codexWebStep } from "./steps";
 import { ModelError, RunOptions, RunResult, systemPrompt } from "./types";
 
 // Codex ships inside the ChatGPT app, so that is checked too.
@@ -212,6 +213,11 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
     let failure: string | undefined;
     let stderr = "";
     let cancelled = false;
+    const steps = new Map<string, string>();
+    const setStep = (id: string, step: string) => {
+      steps.set(id, step);
+      opts.onSteps?.([...steps.values()]);
+    };
 
     const onAbort = () => {
       cancelled = true;
@@ -226,6 +232,19 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
         event = JSON.parse(line);
       } catch {
         return;
+      }
+      const item = event.item;
+      if (
+        event.type === "item.started" &&
+        item?.type === "command_execution" &&
+        item.command
+      ) {
+        setStep(item.id, codexCommandStep(item.command));
+      } else if (
+        (event.type === "item.started" || event.type === "item.completed") &&
+        item?.type === "web_search"
+      ) {
+        setStep(item.id, codexWebStep(item));
       }
       if (event.type === "thread.started" && opts.sessionId && !thread) {
         saveThread(opts.sessionId, event.thread_id);
@@ -270,11 +289,22 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
           stderr.split("\n").filter(Boolean).pop() ||
           `codex exited with code ${code}`
         ).trim();
-        resolve({ text, isError: true, error: classify(message), durationMs });
+        resolve({
+          text,
+          isError: true,
+          error: classify(message),
+          durationMs,
+          steps: steps.size ? [...steps.values()] : undefined,
+        });
         return;
       }
       if (!opts.tools) {
-        resolve({ text, isError: false, durationMs });
+        resolve({
+          text,
+          isError: false,
+          durationMs,
+          steps: steps.size ? [...steps.values()] : undefined,
+        });
         return;
       }
       const split = splitCommands(text);
@@ -282,6 +312,7 @@ export function runCodex(opts: RunOptions): Promise<RunResult> {
         text: split.text,
         isError: false,
         durationMs,
+        steps: steps.size ? [...steps.values()] : undefined,
         commands: split.commands.length ? split.commands : undefined,
       });
     });

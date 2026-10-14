@@ -5,6 +5,7 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { currentModel } from "./models";
+import { claudeStep } from "./steps";
 import {
   ModelError,
   RateLimit,
@@ -188,6 +189,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
     let durationMs: number | undefined;
     let rateLimit: RateLimit | undefined;
     let commands: string[] = [];
+    const steps = new Map<string, string>();
     let stderr = "";
     let cancelled = false;
 
@@ -223,6 +225,13 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
           text += delta.text;
           opts.onText?.(text);
         }
+      } else if (event.type === "assistant") {
+        for (const block of event.message?.content ?? []) {
+          if (block?.type !== "tool_use") continue;
+          const step = claudeStep(block.name, block.input);
+          if (step) steps.set(block.id, step);
+        }
+        if (steps.size) opts.onSteps?.([...steps.values()]);
       } else if (event.type === "rate_limit_event") {
         rateLimit = parseRateLimit(event.rate_limit_info) ?? rateLimit;
       } else if (event.type === "result") {
@@ -231,6 +240,9 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         resultIsError = Boolean(event.is_error) || event.subtype !== "success";
         durationMs = event.duration_ms;
         commands = deniedCommands(event.permission_denials);
+        // Denied commands didn't run; they come back as commands to approve.
+        for (const d of event.permission_denials ?? [])
+          steps.delete(d?.tool_use_id);
       }
     });
     child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
@@ -251,6 +263,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
           isError: true,
           error: { kind: "cancelled", message: "Stopped.", provider: "claude" },
           rateLimit,
+          steps: steps.size ? [...steps.values()] : undefined,
         });
         return;
       }
@@ -268,6 +281,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
           isError: true,
           error: classifyError(message),
           rateLimit,
+          steps: steps.size ? [...steps.values()] : undefined,
           durationMs,
         });
         return;
@@ -276,6 +290,7 @@ export function runClaude(opts: RunOptions): Promise<RunResult> {
         text: finalText,
         isError: false,
         rateLimit,
+        steps: steps.size ? [...steps.values()] : undefined,
         durationMs,
         commands: commands.length ? commands : undefined,
       });

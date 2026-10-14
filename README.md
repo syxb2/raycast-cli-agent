@@ -95,7 +95,7 @@ On an answer: <kbd>↵</kbd> paste to the active app, <kbd>⌘</kbd><kbd>↵</kb
 | Tools (Files and Shell) | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd> | Ask AI and Chat. The model can read files in your home folder and propose shell commands. A command that changes something is shown first; <kbd>↵</kbd> runs it in your login shell and sends the output back, or *Dismiss Command*. On an Ask AI answer, approving continues in Chat. Read-only commands (`ls`, `df`, `lsof`…) may run without asking, as in Claude Code and Codex's read-only sandbox. |
 | Reasoning Effort | <kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd> | Low to Max. Short questions rarely need more than the default. |
 
-The navigation title shows what is on (e.g. *My chat · Web · Tools*). Translate and the rewrite commands always run without them, to stay fast.
+While the model works, each step (web searches, pages opened, files read, commands run) is shown live and kept above the answer. The navigation title shows what is on (e.g. *My chat · Web · Tools*). Translate and the rewrite commands always run without them, to stay fast.
 
 Tips:
 

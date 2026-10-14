@@ -30,6 +30,19 @@ export function rateLimitLines(
   return lines;
 }
 
+// "Sonnet 5.5 · 4.2 s" under an answer.
+export function footerMarkdown(
+  model: string | undefined,
+  label: (m: string) => string,
+  durationMs?: number,
+): string {
+  const parts = [
+    model ? label(model) : undefined,
+    durationMs ? `${(durationMs / 1000).toFixed(1)} s` : undefined,
+  ].filter(Boolean);
+  return parts.length ? `\n\n---\n\n_${parts.join(" · ")}_` : "";
+}
+
 export function errorMarkdown(error: ModelError): string {
   const codex = error.provider === "codex";
   switch (error.kind) {

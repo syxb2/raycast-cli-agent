@@ -14,6 +14,7 @@ export interface StreamState {
   rateLimit?: RateLimit;
   durationMs?: number;
   commands?: string[];
+  steps?: string[];
 }
 
 export function useModelStream() {
@@ -23,6 +24,7 @@ export function useModelStream() {
   });
   const controller = useRef<AbortController | undefined>(undefined);
   const buffer = useRef("");
+  const stepsBuffer = useRef<string[] | undefined>(undefined);
   const timer = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const stop = useCallback(() => controller.current?.abort(), []);
@@ -36,11 +38,14 @@ export function useModelStream() {
       const ac = new AbortController();
       controller.current = ac;
       buffer.current = "";
+      stepsBuffer.current = undefined;
       setState({ text: "", isLoading: true });
 
       timer.current = setInterval(() => {
         setState((s) =>
-          s.text === buffer.current ? s : { ...s, text: buffer.current },
+          s.text === buffer.current && s.steps === stepsBuffer.current
+            ? s
+            : { ...s, text: buffer.current, steps: stepsBuffer.current },
         );
       }, FLUSH_MS);
 
@@ -48,6 +53,7 @@ export function useModelStream() {
         ...opts,
         signal: ac.signal,
         onText: (t) => (buffer.current = t),
+        onSteps: (s) => (stepsBuffer.current = s),
       });
       clearInterval(timer.current);
       await saveRateLimit(result.rateLimit);
@@ -60,6 +66,7 @@ export function useModelStream() {
           rateLimit: result.rateLimit,
           durationMs: result.durationMs,
           commands: result.commands,
+          steps: result.steps,
         });
       }
       return result;

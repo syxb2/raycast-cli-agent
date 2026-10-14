@@ -14,6 +14,8 @@ export interface Message {
   model?: string;
   // Shell commands the model asked to run, until approved or dismissed.
   commands?: string[];
+  steps?: string[];
+  durationMs?: number;
 }
 
 export interface Conversation {

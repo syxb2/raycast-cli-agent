@@ -16,6 +16,7 @@ export interface RunOptions extends RequestOptions {
   sessionId?: string;
   signal?: AbortSignal;
   onText?: (fullText: string) => void;
+  onSteps?: (steps: string[]) => void;
 }
 
 export interface RunResult {
@@ -26,6 +27,8 @@ export interface RunResult {
   durationMs?: number;
   // Shell commands the model wants to run; they wait for the user's approval.
   commands?: string[];
+  // What the model did on the way (see steps.ts).
+  steps?: string[];
 }
 
 export type ModelErrorKind =
