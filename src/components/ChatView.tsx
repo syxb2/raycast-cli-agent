@@ -16,16 +16,10 @@ import {
   groupByProvider,
   matchingValue,
   modelLabel,
-  modelsForProvider,
   setCurrentModel,
 } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
-import {
-  defaultOptions,
-  optionBadges,
-  optionsForModel,
-  RequestOptions,
-} from "../lib/options";
+import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
 import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
 import { commandResultPrompt, runApprovedCommand } from "../lib/shell";
 import {
@@ -36,9 +30,14 @@ import {
   titleFrom,
 } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
+import { chatModelChoices, selectChatModel } from "../lib/chat";
 import { HistoryView } from "./HistoryView";
 import { SettingsView } from "./SettingsView";
-import { enabledProviders, getProviderSettings } from "../lib/settings";
+import {
+  enabledProviders,
+  getProviderSettings,
+  getSettings,
+} from "../lib/settings";
 import { ErrorActions, OptionActions, STOP_SHORTCUT } from "./shared";
 
 export function ChatView({
@@ -63,11 +62,7 @@ export function ChatView({
   const [pendingId, setPendingId] = useState<string | undefined>();
   const stream = useModelStream();
   const catalog = useModels();
-  const models = modelsForProvider(
-    catalog.models,
-    conversation.provider,
-    conversation.model,
-  );
+  const models = chatModelChoices(conversation, catalog.models);
   const sentFirst = useRef(false);
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
@@ -146,7 +141,9 @@ export function ChatView({
     return () => clearTimeout(timer);
   }, [autoRun]);
 
-  const startNew = (provider: Provider = conversation.provider) => {
+  const startNew = (
+    provider: Provider = getSettings().general.defaultProvider,
+  ) => {
     stream.stop();
     const model =
       provider === conversation.provider
@@ -168,16 +165,14 @@ export function ChatView({
 
   const changeModel = (model: string) => {
     if (
-      providerOf(model) !== conversation.provider ||
-      !getProviderSettings(conversation.provider).enabled
+      !getProviderSettings(providerOf(model)).enabled ||
+      (conversation.messages.length > 0 &&
+        providerOf(model) !== conversation.provider)
     )
       return;
     setCurrentModel(model);
-    const updated = {
-      ...conversation,
-      model,
-      options: optionsForModel(conversation.options ?? {}, model),
-    };
+    const updated = selectChatModel(conversation, model);
+    activeId.current = updated.id;
     setConversation(updated);
     if (updated.messages.length) void saveConversation(updated);
   };
@@ -247,27 +242,37 @@ export function ChatView({
       selectedItemId={selectedId}
       onSelectionChange={(id) => id && setSelectedId(id)}
       searchBarAccessory={
-        <List.Dropdown
-          tooltip={`Model (${PROVIDER_NAMES[conversation.provider]})`}
-          isLoading={catalog.isRefreshing}
-          value={matchingValue(conversation.model, models)}
-          onChange={changeModel}
-        >
-          {groupByProvider(models).map((g) => (
-            <List.Dropdown.Section
-              key={g.provider}
-              title={PROVIDER_NAMES[g.provider]}
-            >
-              {g.models.map((m) => (
-                <List.Dropdown.Item
-                  key={m.value}
-                  title={m.title}
-                  value={m.value}
-                />
-              ))}
-            </List.Dropdown.Section>
-          ))}
-        </List.Dropdown>
+        models.length && matchingValue(conversation.model, models) ? (
+          <List.Dropdown
+            key={conversation.provider}
+            tooltip={
+              conversation.messages.length
+                ? `Model (${PROVIDER_NAMES[conversation.provider]})`
+                : "Choose Agent and Model"
+            }
+            isLoading={catalog.isRefreshing}
+            placeholder={
+              catalog.isRefreshing ? "Loading Models…" : "Select Model"
+            }
+            value={matchingValue(conversation.model, models)}
+            onChange={changeModel}
+          >
+            {groupByProvider(models).map((g) => (
+              <List.Dropdown.Section
+                key={g.provider}
+                title={PROVIDER_NAMES[g.provider]}
+              >
+                {g.models.map((m) => (
+                  <List.Dropdown.Item
+                    key={m.value}
+                    title={m.title}
+                    value={m.value}
+                  />
+                ))}
+              </List.Dropdown.Section>
+            ))}
+          </List.Dropdown>
+        ) : undefined
       }
       actions={
         <ActionPanel>
@@ -293,8 +298,11 @@ export function ChatView({
           description={[
             modelLabel(conversation.model),
             ...optionBadges(conversation.options),
+            catalog.error,
             "Type a question and press ↵",
-          ].join(" · ")}
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
       ) : (
         messages.map((m) => {

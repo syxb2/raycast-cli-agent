@@ -3,6 +3,7 @@ import {
   ActionPanel,
   Form,
   Icon,
+  Keyboard,
   List,
   showToast,
   Toast,
@@ -13,7 +14,7 @@ import { useState } from "react";
 import { expandPath } from "../lib/backend/environment";
 import { LANGUAGES } from "../lib/languages";
 import { refreshProviderCatalog } from "../lib/modelCatalog";
-import { loadCatalog, ModelOption } from "../lib/models";
+import { loadCatalog, modelLabel, ModelOption } from "../lib/models";
 import {
   CODEX_DEFAULT,
   PI_DEFAULT,
@@ -97,11 +98,21 @@ export function SettingsView() {
 function GeneralSettingsForm() {
   const { pop } = useNavigation();
   const [values, setValues] = useState(() => getSettings().general);
+  const [saveError, setSaveError] = useState("");
   const enabled = getSettings().providers;
   const set = <K extends keyof GeneralSettings>(
     key: K,
     value: GeneralSettings[K],
-  ) => setValues((previous) => ({ ...previous, [key]: value }));
+  ) => {
+    const next = { ...values, [key]: value };
+    setValues(next);
+    try {
+      updateGeneralSettings(next);
+      setSaveError("");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  };
   const save = async () => {
     try {
       updateGeneralSettings(values);
@@ -119,14 +130,21 @@ function GeneralSettingsForm() {
       navigationTitle="General Settings"
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Save Settings" onSubmit={save} />
+          <Action
+            title="Save Settings"
+            shortcut={Keyboard.Shortcut.Common.Save}
+            onAction={save}
+          />
         </ActionPanel>
       }
     >
       <Form.Description
         title="General"
-        text="Shared settings for both agents. Each new chat stays bound to the agent chosen at creation."
+        text="Changes save automatically. New chats use the default agent; existing chats keep their agent."
       />
+      {saveError ? (
+        <Form.Description title="Not Saved" text={saveError} />
+      ) : null}
       <Form.Dropdown
         id="defaultProvider"
         title="Default Agent"
@@ -232,13 +250,24 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
   const [draft, setDraft] = useState(() => initialDraft(provider));
   const [models, setModels] = useState(() => loadCatalog()?.models ?? []);
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const set = <K extends keyof ProviderDraft>(
     key: K,
     value: ProviderDraft[K],
-  ) => setDraft((previous) => ({ ...previous, [key]: value }));
+  ) => {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+    try {
+      persist(next);
+      setSaveError("");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  };
   const nativeDefault = provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT;
   const choices = models.filter(
-    (model) => providerOf(model.value) === provider,
+    (model) =>
+      providerOf(model.value) === provider && model.value !== nativeDefault,
   );
   for (const raw of [
     nativeDefault,
@@ -253,16 +282,16 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           value,
           title:
             value === nativeDefault
-              ? PROVIDER_NAMES[provider]
-              : value.slice(value.indexOf(":") + 1),
+              ? "Follow CLI Configuration"
+              : modelLabel(value),
         });
     } catch {
       /* Incomplete model input is validated on save. */
     }
   }
-  const persist = () => {
-    if (draft.cliPath.trim()) {
-      const path = expandPath(draft.cliPath.trim());
+  const persist = (value = draft) => {
+    if (value.cliPath.trim()) {
+      const path = expandPath(value.cliPath.trim());
       try {
         accessSync(path, constants.X_OK);
         if (!statSync(path).isFile()) throw new Error();
@@ -273,34 +302,34 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       }
     }
     const common: ProviderSettings = {
-      enabled: draft.enabled,
-      cliPath: draft.cliPath,
-      configDir: draft.configDir,
-      environmentVariables: draft.environmentVariables,
-      defaultModel: draft.defaultModel,
-      customModels: draft.customModelsText
+      enabled: value.enabled,
+      cliPath: value.cliPath,
+      configDir: value.configDir,
+      environmentVariables: value.environmentVariables,
+      defaultModel: value.defaultModel,
+      customModels: value.customModelsText
         .split(/[\n,]/)
         .map((m) => m.trim())
         .filter(Boolean),
-      visibleModels: draft.visibleModels,
-      modelAliases: assignments(draft.aliasesText),
-      tools: draft.tools,
+      visibleModels: value.visibleModels,
+      modelAliases: assignments(value.aliasesText),
+      tools: value.tools,
     };
     if (provider === "codex")
       updateProviderSettings("codex", {
         ...common,
-        effort: draft.effort,
-        webSearch: draft.webSearch,
-        responseStyle: draft.responseStyle,
-        responseVerbosity: draft.responseVerbosity,
-        reasoningSummary: draft.reasoningSummary,
+        effort: value.effort,
+        webSearch: value.webSearch,
+        responseStyle: value.responseStyle,
+        responseVerbosity: value.responseVerbosity,
+        reasoningSummary: value.reasoningSummary,
       });
     else
       updateProviderSettings("pi", {
         ...common,
-        thinkingLevel: draft.thinkingLevel,
+        thinkingLevel: value.thinkingLevel,
         preferredThinkingByModel: assignments(
-          draft.thinkingByModelText,
+          value.thinkingByModelText,
         ) as Record<string, Effort>,
       });
   };
@@ -343,7 +372,11 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       isLoading={busy}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Save Settings" onSubmit={save} />
+          <Action
+            title="Save Settings"
+            shortcut={Keyboard.Shortcut.Common.Save}
+            onAction={save}
+          />
           <Action
             title="Save and Discover Models"
             icon={Icon.ArrowClockwise}
@@ -354,8 +387,11 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
     >
       <Form.Description
         title="Setup"
-        text={`Configure ${PROVIDER_NAMES[provider]} independently. Existing CLI authentication and model-provider configuration are reused.`}
+        text={`Valid changes save automatically for ${PROVIDER_NAMES[provider]}. Existing CLI authentication and configuration are reused.`}
       />
+      {saveError ? (
+        <Form.Description title="Not Saved" text={saveError} />
+      ) : null}
       <Form.Checkbox
         id="enabled"
         label={`Enable ${PROVIDER_NAMES[provider]}`}
@@ -394,7 +430,11 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         {choices.map((model: ModelOption) => (
           <Form.Dropdown.Item
             key={model.value}
-            title={model.title}
+            title={
+              model.value === nativeDefault
+                ? "Follow CLI Configuration"
+                : modelLabel(model.value)
+            }
             value={model.value}
           />
         ))}
@@ -431,7 +471,11 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           {choices.map((model) => (
             <Form.TagPicker.Item
               key={model.value}
-              title={model.title}
+              title={
+                model.value === nativeDefault
+                  ? "Follow CLI Configuration"
+                  : modelLabel(model.value)
+              }
               value={model.value}
             />
           ))}

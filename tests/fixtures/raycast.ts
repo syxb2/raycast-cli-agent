@@ -1,4 +1,6 @@
 export const environment = { supportPath: process.env.CLI_AGENT_TEST_SUPPORT! };
+export const Toast = { Style: { Failure: "failure" } };
+export async function showToast() {}
 export function getPreferenceValues() {
   return JSON.parse(process.env.CLI_AGENT_TEST_PREFERENCES || "{}");
 }

@@ -341,6 +341,7 @@ export interface CodexModel {
   value: string;
   title: string;
   description?: string;
+  resolvedModel?: string;
 }
 
 export async function fetchCodexModels(): Promise<CodexModel[]> {
@@ -353,6 +354,9 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
       {
         value: CODEX_DEFAULT,
         title: "Codex",
+        resolvedModel: config.model
+          ? `${CODEX_PREFIX}${config.model}`
+          : undefined,
         description: config.model
           ? `Configured model: ${config.model}`
           : undefined,
@@ -376,6 +380,8 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
         );
         for (const model of page.data ?? []) {
           const id = model.model || model.id;
+          if (id && model.isDefault && !models[0].resolvedModel)
+            models[0].resolvedModel = `${CODEX_PREFIX}${id}`;
           if (id && !models.some((m) => m.value === `${CODEX_PREFIX}${id}`))
             models.push({
               value: `${CODEX_PREFIX}${id}`,

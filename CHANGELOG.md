@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Save valid setting edits automatically and show validation errors inline
+- Display concrete models with codex/pi prefixes and resolve native CLI defaults without selectable agent entries
+- Avoid Raycast auto-selecting Codex while the initial model catalog loads, and report provider discovery failures
+- Allow choosing any enabled agent's model in an unsent new chat, retaining fixed-agent bindings after sending
 - Replace flat native preferences with General, Codex and Pi Agent settings pages
 - Persist independent provider enablement, model menus, aliases, environment and request defaults
 - Add Codex response controls and Pi per-model thinking settings, with legacy preference initialization

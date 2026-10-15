@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { showToast, Toast } from "@raycast/api";
 import { fetchCodexModels } from "./codex";
 import { fetchPiModels } from "./pi";
 import {
@@ -55,6 +56,20 @@ async function discover(force: boolean): Promise<ModelCatalog> {
       : (cached?.models.filter((m) => providerOf(m.value) === providers[i]) ??
         []),
   );
+  const errors = Object.fromEntries(
+    results.flatMap((result, i) =>
+      result.status === "rejected"
+        ? [
+            [
+              providers[i],
+              result.reason instanceof Error
+                ? result.reason.message
+                : String(result.reason),
+            ],
+          ]
+        : [],
+    ),
+  );
   if (!models.length)
     throw new Error(
       "No models found. Configure an enabled provider in Cli Agent Settings.",
@@ -64,10 +79,11 @@ async function discover(force: boolean): Promise<ModelCatalog> {
       "Provider configuration changed during discovery. Refresh models again.",
     );
   const catalog: ModelCatalog = {
-    version: 2,
-    fingerprint: key,
+    version: 3,
+    fingerprint: Object.keys(errors).length ? "" : key,
     fetchedAt: Date.now(),
     models,
+    errors,
   };
   saveCatalog(catalog);
   return catalog;
@@ -87,7 +103,7 @@ export async function refreshProviderCatalog(
       "Provider configuration changed during discovery. Refresh models again.",
     );
   const catalog: ModelCatalog = {
-    version: 2,
+    version: 3,
     fingerprint: "",
     fetchedAt: Date.now(),
     models: [
@@ -117,12 +133,29 @@ export function refreshCatalog(force = false): Promise<ModelCatalog> {
 export function useModels() {
   const [models, setModels] = useState(availableModels);
   const [isRefreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
   const refresh = useCallback(async (force = false) => {
     setRefreshing(true);
     try {
-      await refreshCatalog(force);
-    } catch {
-      /* Keep native defaults and the last available model catalog. */
+      const catalog = await refreshCatalog(force);
+      const failures = Object.entries(catalog.errors ?? {})
+        .map(([provider, message]) => `${provider}: ${message}`)
+        .join("\n");
+      setError(failures);
+      if (failures)
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "Some models could not be loaded",
+          message: failures,
+        });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setError(message);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Models could not be loaded",
+        message,
+      });
     } finally {
       setModels(availableModels());
       setRefreshing(false);
@@ -131,5 +164,5 @@ export function useModels() {
   useEffect(() => {
     refresh();
   }, [refresh]);
-  return { models, isRefreshing, refresh };
+  return { models, isRefreshing, refresh, error };
 }

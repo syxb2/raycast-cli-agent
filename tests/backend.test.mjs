@@ -359,19 +359,84 @@ test("backend crashes return errors rather than leaving requests pending", async
 
 test("chat model menus contain only models from the bound agent", () => {
   const models = [
-    { value: "codex:default", title: "Codex" },
-    { value: "pi:default", title: "Pi" },
+    { value: "codex:test-model", title: "codex: test-model" },
+    { value: "pi:custom/test-model", title: "pi: custom/test-model" },
   ];
   assert.deepEqual(
     backend
       .modelsForProvider(models, "codex", "codex:older-model")
       .map((m) => m.value),
-    ["codex:default", "codex:older-model"],
+    ["codex:test-model", "codex:older-model"],
   );
   assert.deepEqual(
     backend.modelsForProvider(models, "pi").map((m) => m.value),
-    ["pi:default"],
+    ["pi:custom/test-model"],
   );
+});
+
+test("new chats offer Pi models and keep the selected agent after sending", async () => {
+  const codex = backend.getProviderSettings("codex");
+  const pi = backend.getProviderSettings("pi");
+  let saved;
+  try {
+    backend.updateProviderSettings("codex", { webSearch: true, tools: false });
+    backend.updateProviderSettings("pi", { tools: true });
+    const draft = backend.newConversation(
+      "codex:default",
+      backend.defaultOptions("codex:default"),
+    );
+    const models = [
+      { value: "codex:test-model", title: "codex: test-model" },
+      { value: "pi:custom/another-model", title: "pi: custom/another-model" },
+      { value: "pi:custom/pi-local-model", title: "Pi Model" },
+    ];
+    const choices = backend.chatModelChoices(draft, models);
+    assert.ok(choices.some((m) => m.value === "pi:custom/pi-local-model"));
+    const selected = backend.selectChatModel(draft, "pi:custom/pi-local-model");
+    assert.equal(selected.provider, "pi");
+    assert.equal(selected.model, "pi:custom/pi-local-model");
+    assert.notEqual(selected.id, draft.id);
+    assert.notEqual(selected.sessionId, draft.sessionId);
+    assert.equal(selected.options.webSearch, undefined);
+    assert.equal(selected.options.tools, true);
+    assert.equal(selected.messages.length, 0);
+    const sameAgent = backend.selectChatModel(
+      selected,
+      "pi:custom/another-model",
+    );
+    assert.equal(sameAgent.sessionId, selected.sessionId);
+    assert.equal(sameAgent.id, selected.id);
+    const sent = {
+      ...selected,
+      messages: [
+        {
+          id: "first",
+          question: "Hello",
+          answer: "",
+          error: "Failed",
+          createdAt: Date.now(),
+        },
+      ],
+    };
+    await backend.saveConversation(sent);
+    saved = sent.id;
+    assert.deepEqual(
+      backend.chatModelChoices(sent, models).map((m) => m.value),
+      ["pi:custom/another-model", "pi:custom/pi-local-model"],
+    );
+    assert.throws(
+      () => backend.selectChatModel(sent, "codex:default"),
+      /new chat/,
+    );
+    assert.throws(
+      () => backend.claimSessionProvider(sent.sessionId, "codex"),
+      /bound to pi/,
+    );
+  } finally {
+    if (saved) await backend.deleteConversation(saved);
+    backend.updateProviderSettings("codex", codex);
+    backend.updateProviderSettings("pi", pi);
+  }
 });
 
 test("native session bindings cannot be overwritten by another agent", () => {
@@ -576,13 +641,14 @@ test("provider model visibility, aliases and remembered choices are independent"
     const models = backend.availableModels();
     assert.ok(
       models.some(
-        (m) => m.value === "codex:visible" && m.title === "My Codex Model",
+        (m) =>
+          m.value === "codex:visible" && m.title === "codex: My Codex Model",
       ),
     );
     assert.ok(!models.some((m) => m.value === "codex:hidden"));
     assert.ok(
       models.some(
-        (m) => m.value === "pi:custom/visible" && m.title === "My Pi Model",
+        (m) => m.value === "pi:custom/visible" && m.title === "pi: My Pi Model",
       ),
     );
     backend.setCurrentModel("codex:visible");
@@ -602,6 +668,83 @@ test("provider model visibility, aliases and remembered choices are independent"
   } finally {
     backend.updateProviderSettings("codex", codex);
     backend.updateProviderSettings("pi", pi);
+  }
+});
+
+test("native default models resolve to concrete prefixed menu entries", async () => {
+  const general = backend.getSettings().general;
+  const previous = backend.loadCatalog();
+  try {
+    const models = [
+      ...(await backend.fetchCodexModels()),
+      ...(await backend.fetchPiModels()),
+    ];
+    backend.saveCatalog({
+      version: 3,
+      fingerprint: "fixture",
+      fetchedAt: Date.now(),
+      models,
+    });
+    const menu = backend.availableModels();
+    assert.ok(menu.some((m) => m.value === "codex:changed-model"));
+    assert.ok(menu.some((m) => m.value === "pi:custom/pi-local-model"));
+    assert.ok(
+      menu.every(
+        (m) => m.value !== "codex:default" && m.value !== "pi:default",
+      ),
+    );
+    assert.ok(
+      menu.every((m) => m.title.startsWith(backend.providerOf(m.value) + ": ")),
+    );
+    assert.equal(
+      backend.matchingValue("codex:default", menu),
+      "codex:changed-model",
+    );
+    assert.equal(
+      backend.matchingValue("pi:default", menu),
+      "pi:custom/pi-local-model",
+    );
+    assert.equal(backend.modelLabel("pi:default"), "pi: custom/pi-local-model");
+    backend.updateGeneralSettings({ defaultProvider: "pi" });
+    const fromDisk = JSON.parse(
+      readFileSync(join(dir, "support", "settings.json"), "utf8"),
+    );
+    assert.equal(fromDisk.general.defaultProvider, "pi");
+    const chat = backend.newConversation(backend.currentModel());
+    assert.equal(chat.provider, "pi");
+    assert.ok(
+      backend
+        .chatModelChoices(chat, menu)
+        .some((m) => m.value === "codex:changed-model"),
+    );
+  } finally {
+    backend.updateGeneralSettings(general);
+    if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("a failed Pi discovery is reported and retried without hiding cached models", async () => {
+  const settings = backend.getProviderSettings("pi");
+  const previous = backend.loadCatalog();
+  try {
+    const valid = await backend.refreshCatalog(true);
+    assert.ok(valid.models.some((m) => m.value === "pi:custom/pi-local-model"));
+    backend.updateProviderSettings("pi", { cliPath: join(dir, "missing-pi") });
+    const failed = await backend.refreshCatalog(true);
+    assert.match(failed.errors.pi, /CLI not found/);
+    assert.equal(failed.fingerprint, "");
+    assert.ok(
+      backend
+        .availableModels()
+        .some((m) => m.value === "pi:custom/pi-local-model"),
+    );
+    backend.updateProviderSettings("pi", settings);
+    const recovered = await backend.refreshCatalog();
+    assert.deepEqual(recovered.errors, {});
+    assert.ok(recovered.fingerprint);
+  } finally {
+    backend.updateProviderSettings("pi", settings);
+    if (previous) backend.saveCatalog(previous);
   }
 });
 

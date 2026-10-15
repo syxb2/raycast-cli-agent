@@ -41,9 +41,9 @@ The extension preserves provider credentials and exported environment variables.
 | Codex | `CODEX_HOME`, defaulting to `~/.codex`; includes `config.toml`, configured model providers and existing CLI authentication | `codex app-server --listen stdio://`, JSON-RPC initialize, thread start/resume and turn notifications |
 | Pi Agent | `PI_CODING_AGENT_DIR`, defaulting to `~/.pi/agent`; includes `settings.json`, `models.json` and `auth.json` | `pi --mode rpc`, state validation, prompt and streaming events |
 
-**Codex third-party models:** configure `model`, `model_provider` and the corresponding `[model_providers.<name>]` section in your existing `config.toml`, as you would for the CLI. Choose **Codex** to use that configuration. The backend does not pass `--ignore-user-config`, remove API keys or force the OpenAI provider. A third-party provider without a model-list endpoint still exposes its configured model in the menu.
+**Codex third-party models:** configure `model`, `model_provider` and the corresponding `[model_providers.<name>]` section in your existing `config.toml`, as you would for the CLI. The provider's **Follow CLI Configuration** default resolves to that configured model. The backend does not pass `--ignore-user-config`, remove API keys or force the OpenAI provider. A third-party provider without a model-list endpoint still exposes its configured model in the menu.
 
-**Pi models:** choose **Pi Agent** to use Pi's locally resolved model. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry.
+**Pi models:** **Follow CLI Configuration** resolves Pi's active model through its native state. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry. Chat menus show concrete models as `codex: model-id` or `pi: provider/model-id`, with no selectable agent-only entries.
 
 **Environment:** a login shell supplies exported API keys, proxy variables and PATH that a GUI process may lack. These values remain in memory. Restart the extension process after changing shell exports. Changes to the global CLI configuration files invalidate the cached model catalog and create a fresh Codex runtime while retaining native thread bindings.
 
@@ -60,6 +60,8 @@ The **Settings** command has three pages:
 | Pi Agent | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, thinking level, thinking per model, tools and environment overrides |
 
 Use **Save and Discover Models** in a provider page to save the edited paths/environment and query only that provider. Model visibility and aliases affect that provider's menus. The configured default model remains visible. A model default change resets the remembered selection for that provider; other providers' choices are preserved.
+
+Valid setting changes are saved automatically, including when returning from a form. Incomplete or invalid input displays **Not Saved** and leaves the previous valid settings on disk. **Save Settings** also validates and saves explicitly. The default agent applies to the Chat command and **New Chat**; **New Chat with Agent** overrides it for that new conversation.
 
 Reasoning uses the chat's explicit choice first, then Pi's model-specific thinking level (when configured), then the provider setting, then the native CLI default. Choose **Provider Default** in a chat to inherit these defaults.
 
@@ -114,7 +116,7 @@ The extension keeps all chat management local:
 - `sessions/bindings/<session-id>.json`: one fixed agent and its native session identity and configuration directory.
 - Codex keeps its native rollout in its own configured home. The extension resumes the recorded thread through the current app-server.
 - Pi session files are kept under the extension's `sessions/pi` directory and resumed by exact file path. The reported native identity is verified before any user prompt is sent.
-- Each chat is bound to Codex or Pi when created. Model menus only show that agent's models. Use **New Chat with Agent** to start with a different agent; conversation history is never replayed to another agent.
+- Before sending the first message, a new chat's model menu offers all enabled agents. Selecting another agent creates a fresh draft with its own session identity and defaults. After sending, the chat is bound to that agent and its model menu only shows that agent's models. Use **New Chat with Agent** to start another chat; conversation history is never replayed to another agent.
 - Older single-agent bindings are converted when used. Old chats with multiple agent bindings must be replaced with a new chat; their stored history is retained.
 - Requests targeting the same local session are serialized. Cancelling one Codex turn interrupts that turn without shutting down the shared server or other chats.
 - Deleting a conversation removes its visible history and extension-owned binding. Native CLI session files are retained; deletion does not erase the CLI's independent history.

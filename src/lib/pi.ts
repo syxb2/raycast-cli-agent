@@ -262,13 +262,23 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
 }
 
 export async function fetchPiModels(): Promise<
-  { value: string; title: string; description?: string }[]
+  {
+    value: string;
+    title: string;
+    description?: string;
+    resolvedModel?: string;
+  }[]
 > {
   const { rpc } = await launchPi();
   try {
+    const state = await rpc.request("get_state", {}, 20_000);
     const response = await rpc.request("get_available_models", {}, 20_000);
-    return [
-      { value: PI_DEFAULT, title: "Pi Agent" },
+    const activeModel =
+      state.model?.provider && state.model?.id
+        ? `${PI_PREFIX}${state.model.provider}/${state.model.id}`
+        : undefined;
+    const models = [
+      { value: PI_DEFAULT, title: "Pi Agent", resolvedModel: activeModel },
       ...(Array.isArray(response) ? response : (response.models ?? []))
         .filter((m: RecordValue) => m.provider && m.id)
         .map((m: RecordValue) => ({
@@ -277,6 +287,9 @@ export async function fetchPiModels(): Promise<
           description: m.reasoning ? "Supports reasoning" : undefined,
         })),
     ];
+    if (activeModel && !models.some((m) => m.value === activeModel))
+      models.push({ value: activeModel, title: state.model.id });
+    return models;
   } finally {
     rpc.shutdown();
   }

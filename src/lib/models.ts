@@ -22,17 +22,16 @@ export interface ModelOption {
 }
 
 export interface ModelCatalog {
-  version: 2;
+  version: 3;
   fingerprint: string;
   fetchedAt: number;
   models: ModelOption[];
+  errors?: Partial<Record<Provider, string>>;
 }
 
-// Default selections preserve each CLI's local model and provider settings.
-export const FALLBACK_MODELS: ModelOption[] = [
-  { title: "Codex", value: CODEX_DEFAULT },
-  { title: "Pi Agent", value: PI_DEFAULT },
-];
+export function isNativeDefault(model: string): boolean {
+  return model === CODEX_DEFAULT || model === PI_DEFAULT;
+}
 
 function supportFile(name: string): string {
   mkdirSync(environment.supportPath, { recursive: true });
@@ -96,7 +95,7 @@ export function loadCatalog(): ModelCatalog | undefined {
     const catalog = JSON.parse(
       readFileSync(supportFile("models.json"), "utf8"),
     );
-    return catalog.version === 2 ? catalog : undefined;
+    return catalog.version === 3 ? catalog : undefined;
   } catch {
     return undefined;
   }
@@ -106,41 +105,49 @@ export function saveCatalog(catalog: ModelCatalog): void {
   writeFileSync(supportFile("models.json"), JSON.stringify(catalog));
 }
 
+export function resolvedModel(model: string): string {
+  return (
+    loadCatalog()?.models.find((m) => m.value === model)?.resolvedModel ?? model
+  );
+}
+
 // Resolved aliases can share one selected catalog entry.
 export function sameModel(a: string, b: string): boolean {
   if (a === b) return true;
-  const models = loadCatalog()?.models ?? [];
-  const resolve = (v: string) =>
-    models.find((m) => m.value === v)?.resolvedModel ?? v;
-  return resolve(a) === resolve(b);
+  return resolvedModel(a) === resolvedModel(b);
 }
 
 export function modelLabel(model: string): string {
   if (!isSupportedModel(model)) return model;
+  model = resolvedModel(model);
   const provider = providerOf(model);
   const alias = getProviderSettings(provider).modelAliases[model];
-  if (alias) return alias;
-  if (model === CODEX_DEFAULT) return "Codex";
-  if (model === PI_DEFAULT) return "Pi Agent";
-  const known = loadCatalog()?.models.find((m) => m.value === model);
-  return (
-    known?.title ??
-    model.slice(provider === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length)
-  );
+  const name =
+    alias ||
+    (isNativeDefault(model)
+      ? "CLI default"
+      : model.slice(
+          provider === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length,
+        ));
+  return `${provider}: ${name}`;
 }
 
 export function availableModels(): ModelOption[] {
-  const catalog = loadCatalog()?.models ?? FALLBACK_MODELS;
+  const catalog = loadCatalog()?.models ?? [];
   return enabledProviders().flatMap((provider) => {
     const settings = getProviderSettings(provider);
-    const list = catalog.filter((m) => providerOf(m.value) === provider);
+    const list = catalog.filter(
+      (m) => providerOf(m.value) === provider && !isNativeDefault(m.value),
+    );
     const nativeDefault = provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT;
-    for (const value of [
+    for (const model of [
       nativeDefault,
       ...settings.customModels,
       settings.defaultModel,
       currentModel(provider),
     ]) {
+      const value = resolvedModel(model);
+      if (isNativeDefault(value)) continue;
       if (!list.some((m) => m.value === value))
         list.push({ value, title: modelLabel(value) });
     }
@@ -148,23 +155,22 @@ export function availableModels(): ModelOption[] {
       .filter(
         (m) =>
           settings.visibleModels === null ||
-          settings.visibleModels.includes(m.value) ||
-          m.value === settings.defaultModel,
+          settings.visibleModels.some((value) => sameModel(value, m.value)) ||
+          sameModel(m.value, settings.defaultModel),
       )
       .map((m) => ({
         ...m,
-        title:
-          settings.modelAliases[m.value] ||
-          (m.value === CODEX_DEFAULT || m.value === PI_DEFAULT
-            ? modelLabel(m.value)
-            : m.title),
+        title: modelLabel(m.value),
       }));
   });
 }
 
 // The list entry matching the current model, so dropdowns show it as selected.
 export function matchingValue(model: string, list: ModelOption[]): string {
-  return list.find((m) => sameModel(m.value, model))?.value ?? model;
+  return (
+    list.find((m) => sameModel(m.value, model))?.value ??
+    (isNativeDefault(model) ? "" : model)
+  );
 }
 
 // Groups models by the native CLI that owns them.
@@ -185,9 +191,13 @@ export function modelsForProvider(
   provider: Provider,
   current?: string,
 ): ModelOption[] {
-  const list = models.filter((m) => providerOf(m.value) === provider);
+  const list = models.filter(
+    (m) => providerOf(m.value) === provider && !isNativeDefault(m.value),
+  );
+  current = current && resolvedModel(current);
   if (
     current &&
+    !isNativeDefault(current) &&
     providerOf(current) === provider &&
     !list.some((m) => sameModel(m.value, current))
   ) {
