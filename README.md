@@ -21,7 +21,7 @@ npm ci
 npm run dev
 ```
 
-Choose **Codex** or **Pi Agent** in the extension's Default Model preference. The chosen model is shared across commands and remembered. Model menus also offer discovered models and manually entered Extra Models.
+Open Raycast's **Settings** command with the **Cli Agent** subtitle. Settings are organized into **General**, **Codex** and **Pi Agent**, with independent provider records, following Claudian's provider settings structure. Each provider remembers its own model selection.
 
 ```bash
 npm test                                     # Isolated backend protocol regression tests
@@ -47,7 +47,27 @@ The extension preserves provider credentials and exported environment variables.
 
 **Environment:** a login shell supplies exported API keys, proxy variables and PATH that a GUI process may lack. These values remain in memory. Restart the extension process after changing shell exports. Changes to the global CLI configuration files invalidate the cached model catalog and create a fresh Codex runtime while retaining native thread bindings.
 
-Optional **Codex Configuration Directory** and **Pi Configuration Directory** preferences override the respective environment variables. CLI Path preferences can point at installations outside the discovered PATH. Changing configuration directories requires starting a new chat or restoring the original directory before resuming an existing binding.
+Each provider's **Configuration Directory** field overrides its environment variable. Its **CLI Path** can point at an installation outside the discovered PATH. Changing configuration directories requires starting a new chat or restoring the original directory before resuming an existing binding.
+
+## Provider settings
+
+The **Settings** command has three pages:
+
+| Page | Settings |
+| --- | --- |
+| General | Default agent, primary and secondary languages, shared extra instructions |
+| Codex | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, reasoning effort, response style, verbosity, reasoning summary, web search, tools and environment overrides |
+| Pi Agent | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, thinking level, thinking per model, tools and environment overrides |
+
+Use **Save and Discover Models** in a provider page to save the edited paths/environment and query only that provider. Model visibility and aliases affect that provider's menus. The configured default model remains visible. A model default change resets the remembered selection for that provider; other providers' choices are preserved.
+
+Reasoning uses the chat's explicit choice first, then Pi's model-specific thinking level (when configured), then the provider setting, then the native CLI default. Choose **Provider Default** in a chat to inherit these defaults.
+
+At least one provider must remain enabled. Disabling the default agent selects another enabled agent as the default for new requests. Disabled agents disappear from new-chat and model menus and cannot receive new requests; existing chats retain their original binding and can resume when the agent is re-enabled.
+
+Settings are stored as `settings.json` in the extension's support directory, with separate `general`, `providers.codex` and `providers.pi` records and file permissions `0600`. On first use, available legacy Raycast preferences and the previous selected model initialize this document. Subsequent changes use the Settings command rather than the old flat Raycast preference fields.
+
+Environment overrides use literal `KEY=value` lines, optionally quoted. Shell substitutions are never evaluated. These manually entered overrides are saved locally; native authentication files are not copied. Changes to shell exports require restarting the extension process, while provider overrides take effect on subsequent requests.
 
 ## Commands
 
@@ -56,6 +76,7 @@ Optional **Codex Configuration Directory** and **Pi Configuration Directory** pr
 | Ask AI | Answer a question from a command argument or Raycast fallback search. An empty question opens Chat. |
 | Chat | Multi-turn conversation bound to one agent; models can change within that agent. |
 | Chat History | Search, reopen or delete local conversations. |
+| Settings | Open General, Codex and Pi Agent configuration pages. |
 | Ask About Selection | Ask a question about selected text, with clipboard fallback. |
 | Ask About Finder Selection | Pass selected paths to the CLI for read-only file questions. |
 | Fix Spelling and Grammar | Correct selected text and paste the result in place. |
@@ -75,9 +96,9 @@ On an answer: paste to the active app, copy, continue in Chat, regenerate, ask a
 | --- | --- |
 | Web Search | Codex's native search; only shown for Codex. Pi has no built-in web search in this extension. |
 | Tools | Read files and propose shell commands for review. |
-| Reasoning Effort | Override Codex effort or Pi thinking level; support depends on the selected model. Omit to retain the CLI default. |
+| Reasoning Effort | Override Codex effort or Pi thinking level; support depends on the selected model. Choose Provider Default to inherit the provider and model settings. |
 | Extra Instructions | Added to every request, including translation and rewriting. |
-| Extra Models | Comma-separated `codex:model-id` or `pi:provider/model-id`. Unprefixed values are treated as Codex models. |
+| Extra Models | Configured per provider; model IDs may omit that provider's `codex:` or `pi:` prefix. |
 
 Codex runs in a read-only sandbox and native approval requests are denied. Shell tools are disabled when file access is unnecessary. Pi exposes only `read,grep,find,ls` for file requests and disables its tools for plain text tasks. Extensions, MCP and plugin tools are disabled for these requests; this restriction does not replace model, provider or authentication settings.
 
@@ -116,4 +137,4 @@ Add `--spotlight` to create `~/Applications/Cli Agent.app`:
 curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/install.sh | bash -s -- --spotlight
 ```
 
-Spotlight provides a separate, one-shot dialog using the extension's last chosen model. It uses `codex exec` or Pi print mode with the login shell's native configuration, preserves API keys and does not maintain chat history. Raycast-only configuration directory and CLI-path overrides do not apply to this helper; use the corresponding shell environment variables instead.
+Spotlight provides a separate, one-shot dialog using the configured default agent and its remembered model. It reads the same provider settings, including enablement, CLI path, configuration directory and environment overrides. It uses `codex exec` or Pi print mode, preserves API keys and does not maintain chat history.

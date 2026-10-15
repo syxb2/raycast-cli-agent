@@ -1,17 +1,27 @@
-import { getPreferenceValues } from "@raycast/api";
 import { currentModel } from "./models";
 import { providerOf } from "./provider";
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+import {
+  CODEX_EFFORTS,
+  PI_THINKING_LEVELS,
+  Effort,
+  getProviderSettings,
+} from "./settings";
+export type { Effort } from "./settings";
 
-// Codex turn effort and Pi thinking levels. Support depends on the selected model.
-export const EFFORTS: { value: Effort; title: string }[] = [
-  { value: "low", title: "Low" },
-  { value: "medium", title: "Medium" },
-  { value: "high", title: "High" },
-  { value: "xhigh", title: "Extra High" },
-  { value: "max", title: "Max" },
-];
+export function effortsForProvider(
+  provider: "codex" | "pi",
+): { value: Effort; title: string }[] {
+  return (provider === "codex" ? CODEX_EFFORTS : PI_THINKING_LEVELS).map(
+    (value) => ({
+      value,
+      title:
+        value === "xhigh"
+          ? "Extra High"
+          : value[0].toUpperCase() + value.slice(1),
+    }),
+  );
+}
 
 // What a request may use beyond plain text. Everything is off by default:
 // each one makes answers slower and requests bigger.
@@ -26,17 +36,23 @@ export interface RequestOptions {
 }
 
 export function defaultOptions(model = currentModel()): RequestOptions {
-  const prefs = getPreferenceValues<Preferences>();
+  const provider = providerOf(model);
+  const settings = getProviderSettings(provider);
   return {
     webSearch:
-      providerOf(model) === "codex" ? prefs.webSearch || undefined : undefined,
-    effort: (prefs.effort as Effort) || undefined,
-    tools: prefs.chatTools || undefined,
+      provider === "codex"
+        ? getProviderSettings("codex").webSearch || undefined
+        : undefined,
+    // Leave reasoning unset so the backend can resolve provider/model defaults.
+    tools: settings.tools || undefined,
   };
 }
 
 export function effortTitle(effort: Effort | undefined): string {
-  return EFFORTS.find((e) => e.value === effort)?.title ?? "CLI Default";
+  return (
+    effortsForProvider("pi").find((e) => e.value === effort)?.title ??
+    "Provider Default"
+  );
 }
 
 // Short markers for titles: "Web · Tools · High".

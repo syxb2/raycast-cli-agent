@@ -1,4 +1,4 @@
-import { getPreferenceValues } from "@raycast/api";
+import { getSettings } from "./settings";
 import { RequestOptions } from "./options";
 import { Provider } from "./provider";
 
@@ -47,7 +47,7 @@ const DEFAULT_SYSTEM_PROMPT = [
 ].join(" ");
 
 export function systemPrompt(base = DEFAULT_SYSTEM_PROMPT): string {
-  const extra = getPreferenceValues<Preferences>().extraInstructions?.trim();
+  const extra = getSettings().general.extraInstructions.trim();
   return extra
     ? `${base}\n\nAdditional instructions from the user: ${extra}`
     : base;

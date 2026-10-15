@@ -1,4 +1,4 @@
-import { environment, getPreferenceValues } from "@raycast/api";
+import { environment } from "@raycast/api";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -10,6 +10,8 @@ import {
   isSupportedModel,
   providerOf,
 } from "./provider";
+
+import { enabledProviders, getProviderSettings, getSettings } from "./settings";
 
 export interface ModelOption {
   title: string;
@@ -37,22 +39,55 @@ function supportFile(name: string): string {
   return join(environment.supportPath, name);
 }
 
-// The last chosen model is shared by all commands and persists. Stored in a
-// small file because LocalStorage is async and this is read synchronously.
-export function currentModel(): string {
+// Remember model choices independently; changing one provider's default invalidates
+// its previous choice without affecting another provider.
+export function currentModel(
+  provider: Provider = getSettings().general.defaultProvider,
+): string {
+  const settings = getProviderSettings(provider);
+  if (!settings.enabled)
+    throw new Error(
+      `${provider} is disabled. Enable it in Cli Agent Settings.`,
+    );
   try {
-    const saved = readFileSync(supportFile("current-model"), "utf8").trim();
-    if (isSupportedModel(saved)) return saved;
+    const saved = JSON.parse(
+      readFileSync(supportFile("current-models.json"), "utf8"),
+    )[provider];
+    if (
+      saved?.defaultModel === settings.defaultModel &&
+      isSupportedModel(saved.model) &&
+      providerOf(saved.model) === provider &&
+      (settings.visibleModels === null ||
+        settings.visibleModels.includes(saved.model) ||
+        saved.model === settings.defaultModel)
+    )
+      return saved.model;
   } catch {
-    // nothing chosen yet
+    /* No remembered model for this provider. */
   }
-  const configured = getPreferenceValues<Preferences>().model;
-  return configured && isSupportedModel(configured)
-    ? configured
-    : CODEX_DEFAULT;
+  return settings.defaultModel;
 }
 
 export function setCurrentModel(model: string): void {
+  const provider = providerOf(model);
+  const settings = getProviderSettings(provider);
+  if (!settings.enabled)
+    throw new Error(
+      `${provider} is disabled. Enable it in Cli Agent Settings.`,
+    );
+  let saved: Record<string, { model: string; defaultModel: string }> = {};
+  try {
+    saved = JSON.parse(
+      readFileSync(supportFile("current-models.json"), "utf8"),
+    );
+  } catch {
+    /* First model choice. */
+  }
+  saved[provider] = { model, defaultModel: settings.defaultModel };
+  writeFileSync(supportFile("current-models.json"), JSON.stringify(saved), {
+    mode: 0o600,
+  });
+  // The standalone Spotlight helper uses the most recently selected model.
   writeFileSync(supportFile("current-model"), model);
 }
 
@@ -81,36 +116,50 @@ export function sameModel(a: string, b: string): boolean {
 }
 
 export function modelLabel(model: string): string {
+  if (!isSupportedModel(model)) return model;
+  const provider = providerOf(model);
+  const alias = getProviderSettings(provider).modelAliases[model];
+  if (alias) return alias;
   if (model === CODEX_DEFAULT) return "Codex";
   if (model === PI_DEFAULT) return "Pi Agent";
   const known = loadCatalog()?.models.find((m) => m.value === model);
-  if (known) return known.title;
-  if (!isSupportedModel(model)) return model;
-  return model.slice(
-    providerOf(model) === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length,
+  return (
+    known?.title ??
+    model.slice(provider === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length)
   );
 }
 
-// CLI list (or fallback) + Extra Models preference + the current model if missing.
 export function availableModels(): ModelOption[] {
-  const list = (loadCatalog()?.models ?? FALLBACK_MODELS).map((m) =>
-    m.value === CODEX_DEFAULT || m.value === PI_DEFAULT
-      ? { ...m, title: modelLabel(m.value) }
-      : m,
-  );
-  const custom = (getPreferenceValues<Preferences>().customModels ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((model) =>
-      isSupportedModel(model) ? model : `${CODEX_PREFIX}${model}`,
-    );
-  for (const value of [...custom, currentModel()]) {
-    if (!list.some((m) => sameModel(m.value, value))) {
-      list.push({ title: modelLabel(value), value });
+  const catalog = loadCatalog()?.models ?? FALLBACK_MODELS;
+  return enabledProviders().flatMap((provider) => {
+    const settings = getProviderSettings(provider);
+    const list = catalog.filter((m) => providerOf(m.value) === provider);
+    const nativeDefault = provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT;
+    for (const value of [
+      nativeDefault,
+      ...settings.customModels,
+      settings.defaultModel,
+      currentModel(provider),
+    ]) {
+      if (!list.some((m) => m.value === value))
+        list.push({ value, title: modelLabel(value) });
     }
-  }
-  return list;
+    return list
+      .filter(
+        (m) =>
+          settings.visibleModels === null ||
+          settings.visibleModels.includes(m.value) ||
+          m.value === settings.defaultModel,
+      )
+      .map((m) => ({
+        ...m,
+        title:
+          settings.modelAliases[m.value] ||
+          (m.value === CODEX_DEFAULT || m.value === PI_DEFAULT
+            ? modelLabel(m.value)
+            : m.title),
+      }));
+  });
 }
 
 // The list entry matching the current model, so dropdowns show it as selected.

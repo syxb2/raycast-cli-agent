@@ -218,6 +218,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         send({ type: "agent_settled" });
       }
     }
+    if (method === "set_thinking_level") reply();
     if (method === "abort") {
       reply();
       send({ type: "agent_settled" });

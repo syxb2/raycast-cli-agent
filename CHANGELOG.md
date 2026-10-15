@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Replace flat native preferences with General, Codex and Pi Agent settings pages
+- Persist independent provider enablement, model menus, aliases, environment and request defaults
+- Add Codex response controls and Pi per-model thinking settings, with legacy preference initialization
+- Apply provider settings to the standalone Spotlight helper
+
 - Bind each chat to one agent, remove cross-agent context replay and restrict chat model menus to that agent
 
 - Replace the Claude backend with Codex app-server JSON-RPC and Pi Agent RPC backends

@@ -1,4 +1,5 @@
 import { codexModelId, CODEX_DEFAULT, CODEX_PREFIX } from "./provider";
+import { getProviderSettings } from "./settings";
 import { RunOptions, RunResult } from "./types";
 import { codexCommandStep, codexWebStep } from "./steps";
 import {
@@ -48,7 +49,7 @@ async function acquireRuntime(): Promise<{
   const binary = resolveBinary("codex", env);
   if (!binary)
     throw new Error(
-      "Codex CLI not found. Set Codex CLI Path in extension preferences.",
+      "Codex CLI not found. Open Cli Agent Settings → Codex → CLI Path.",
     );
   const key = runtimeFingerprint("codex", binary, env);
   let entry = runtimes.get(key);
@@ -180,6 +181,7 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
     const model = codexModelId(opts.model ?? CODEX_DEFAULT) || config.model;
     const configDir = configDirectory("codex", env);
     const native = loadNativeSession(opts.sessionId, "codex", configDir);
+    const providerSettings = getProviderSettings("codex");
     const readable = Boolean(opts.tools || opts.readDirs?.length);
     const overrides: RecordValue = {
       web_search: opts.webSearch ? "live" : "disabled",
@@ -190,6 +192,8 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
       "features.apps": false,
       "features.plugins": false,
     };
+    if (providerSettings.responseVerbosity !== "default")
+      overrides.model_verbosity = providerSettings.responseVerbosity;
     if (config.mcp_servers) {
       // Config RPC overrides use structured values, not TOML-quoted path keys.
       // Keep transport fields so replacing the table remains valid.
@@ -284,11 +288,21 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     opts.signal?.throwIfAborted();
     const turn = await rpc.request("turn/start", {
+      ...(providerSettings.reasoningSummary !== "default"
+        ? { summary: providerSettings.reasoningSummary }
+        : {}),
       threadId,
       input: [{ type: "text", text: opts.prompt, text_elements: [] }],
       ...(model ? { model } : {}),
-      ...(opts.effort || config.model_reasoning_effort
-        ? { effort: opts.effort || config.model_reasoning_effort }
+      ...(opts.effort ||
+      providerSettings.effort ||
+      config.model_reasoning_effort
+        ? {
+            effort:
+              opts.effort ||
+              providerSettings.effort ||
+              config.model_reasoning_effort,
+          }
         : {}),
     });
     turnId ??= turn.turn.id;

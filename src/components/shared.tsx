@@ -3,14 +3,15 @@ import {
   ActionPanel,
   Icon,
   Keyboard,
-  openExtensionPreferences,
+  useNavigation,
 } from "@raycast/api";
 import { spawn } from "node:child_process";
 import { ModelError } from "../lib/types";
 import { groupByProvider, ModelOption, sameModel } from "../lib/models";
-import { EFFORTS, RequestOptions } from "../lib/options";
+import { effortsForProvider, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
 import { resolvePiBinary } from "../lib/pi";
+import { SettingsView } from "./SettingsView";
 import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
 
 function loginCommand(provider: Provider | undefined): string {
@@ -34,6 +35,7 @@ function openLoginInTerminal(provider: Provider | undefined) {
 }
 
 export function ErrorActions({ error }: { error: ModelError }) {
+  const { push } = useNavigation();
   if (error.kind === "not-logged-in") {
     return (
       <Action
@@ -46,9 +48,9 @@ export function ErrorActions({ error }: { error: ModelError }) {
   if (error.kind === "not-installed") {
     return (
       <Action
-        title="Open Extension Preferences"
+        title="Open Cli Agent Settings"
         icon={Icon.Gear}
-        onAction={openExtensionPreferences}
+        onAction={() => push(<SettingsView />)}
       />
     );
   }
@@ -101,10 +103,11 @@ export function ModelSubmenu(props: {
           icon={Icon.ArrowClockwise}
           onAction={props.onRefresh}
         />
-        <Action
-          title="Add Extra Model…"
-          icon={Icon.Plus}
-          onAction={openExtensionPreferences}
+        <Action.Push
+          title="Provider Settings…"
+          icon={Icon.Gear}
+          target={<SettingsView />}
+          onPop={() => queueMicrotask(props.onRefresh)}
         />
       </ActionPanel.Section>
     </ActionPanel.Submenu>
@@ -162,11 +165,11 @@ export function OptionActions(props: {
         shortcut={EFFORT_SHORTCUT}
       >
         <Action
-          title="CLI Default"
+          title="Provider Default"
           icon={options.effort ? Icon.Circle : Icon.Checkmark}
           onAction={() => onChange({ ...options, effort: undefined })}
         />
-        {EFFORTS.map((e) => (
+        {effortsForProvider(providerOf(props.model)).map((e) => (
           <Action
             key={e.value}
             title={e.title}

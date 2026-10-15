@@ -26,13 +26,7 @@ import {
   optionsForModel,
   RequestOptions,
 } from "../lib/options";
-import {
-  CODEX_DEFAULT,
-  PI_DEFAULT,
-  Provider,
-  PROVIDER_NAMES,
-  providerOf,
-} from "../lib/provider";
+import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
 import { commandResultPrompt, runApprovedCommand } from "../lib/shell";
 import {
   Conversation,
@@ -43,6 +37,8 @@ import {
 } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
 import { HistoryView } from "./HistoryView";
+import { SettingsView } from "./SettingsView";
+import { enabledProviders, getProviderSettings } from "../lib/settings";
 import { ErrorActions, OptionActions, STOP_SHORTCUT } from "./shared";
 
 export function ChatView({
@@ -155,9 +151,7 @@ export function ChatView({
     const model =
       provider === conversation.provider
         ? conversation.model
-        : provider === "codex"
-          ? CODEX_DEFAULT
-          : PI_DEFAULT;
+        : currentModel(provider);
     const fresh = newConversation(
       model,
       provider === conversation.provider
@@ -173,7 +167,11 @@ export function ChatView({
   };
 
   const changeModel = (model: string) => {
-    if (providerOf(model) !== conversation.provider) return;
+    if (
+      providerOf(model) !== conversation.provider ||
+      !getProviderSettings(conversation.provider).enabled
+    )
+      return;
     setCurrentModel(model);
     const updated = {
       ...conversation,
@@ -402,14 +400,25 @@ function ChatActions({
         onAction={() => onNew()}
       />
       <ActionPanel.Submenu title="New Chat with Agent" icon={Icon.PlusCircle}>
-        <Action title="New Codex Chat" onAction={() => onNew("codex")} />
-        <Action title="New Pi Agent Chat" onAction={() => onNew("pi")} />
+        {enabledProviders().map((provider) => (
+          <Action
+            key={provider}
+            title={`New ${PROVIDER_NAMES[provider]} Chat`}
+            onAction={() => onNew(provider)}
+          />
+        ))}
       </ActionPanel.Submenu>
       <Action
         title="Chat History"
         icon={Icon.Clock}
         shortcut={Keyboard.Shortcut.Common.ToggleQuickLook}
         onAction={onHistory}
+      />
+      <Action.Push
+        title="Settings"
+        icon={Icon.Gear}
+        target={<SettingsView />}
+        onPop={() => queueMicrotask(onRefreshModels)}
       />
       <Action
         title="Refresh Model List"

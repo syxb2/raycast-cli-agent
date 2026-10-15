@@ -6,3 +6,6 @@ export * from "../../src/lib/models";
 export * from "../../src/lib/storage";
 export * from "../../src/lib/translation";
 export * from "../../src/lib/backend/sessions";
+export * from "../../src/lib/settings";
+export * from "../../src/lib/options";
+export * from "../../src/lib/backend/environment";

@@ -1,10 +1,11 @@
-import { environment, getPreferenceValues } from "@raycast/api";
+import { environment } from "@raycast/api";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { Provider } from "../provider";
+import { getProviderSettings, parseEnvironmentVariables } from "../settings";
 
 let shellEnvironment: Promise<NodeJS.ProcessEnv> | undefined;
 
@@ -69,11 +70,11 @@ export function configDirectory(
   provider: Provider,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const prefs = getPreferenceValues<Preferences>();
+  const settings = getProviderSettings(provider);
   const value =
     provider === "codex"
-      ? prefs.codexHome?.trim() || env.CODEX_HOME || join(homedir(), ".codex")
-      : prefs.piAgentDir?.trim() ||
+      ? settings.configDir || env.CODEX_HOME || join(homedir(), ".codex")
+      : settings.configDir ||
         env.PI_CODING_AGENT_DIR ||
         join(homedir(), ".pi/agent");
   return expandPath(value);
@@ -83,10 +84,16 @@ export function providerEnvironment(
   provider: Provider,
   base: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  return {
+  const env = {
     ...base,
+    ...parseEnvironmentVariables(
+      getProviderSettings(provider).environmentVariables,
+    ),
+  };
+  return {
+    ...env,
     [provider === "codex" ? "CODEX_HOME" : "PI_CODING_AGENT_DIR"]:
-      configDirectory(provider, base),
+      configDirectory(provider, env),
   };
 }
 
@@ -94,10 +101,7 @@ export function resolveBinary(
   provider: Provider,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  const prefs = getPreferenceValues<Preferences>();
-  const custom = (
-    provider === "codex" ? prefs.codexPath : prefs.piPath
-  )?.trim();
+  const custom = getProviderSettings(provider).cliPath;
   const paths = custom
     ? [expandPath(custom)]
     : [

@@ -124,7 +124,7 @@ echo
 bold "Done. Search for \"Cli Agent\" commands in Raycast."
 cat <<'EOF'
   Next steps:
-  • Set your Primary Language: Raycast Settings → Extensions → Cli Agent
+  • Open the Settings command (Cli Agent) to configure General, Codex and Pi Agent
   • Make Ask AI a fallback command, and give hotkeys to Translate and Replace
     or Fix Spelling and Grammar
   • To update, run this command again

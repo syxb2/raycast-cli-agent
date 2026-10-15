@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { getProviderSettings } from "./settings";
 import { PI_DEFAULT, PI_PREFIX, piModelId } from "./provider";
 import { RunOptions, RunResult } from "./types";
 import {
@@ -30,7 +31,7 @@ async function launchPi(opts?: RunOptions): Promise<{
   const binary = resolveBinary("pi", env);
   if (!binary)
     throw new Error(
-      "Pi Agent CLI not found. Set Pi CLI Path in extension preferences.",
+      "Pi Agent CLI not found. Open Cli Agent Settings → Pi Agent → CLI Path.",
     );
   const configDir = configDirectory("pi", env);
   const native = loadNativeSession(opts?.sessionId, "pi", configDir);
@@ -48,7 +49,8 @@ async function launchPi(opts?: RunOptions): Promise<{
     const model = piModelId(opts.model ?? PI_DEFAULT);
     if (model)
       args.push("--provider", model.provider, "--model", model.modelId);
-    if (opts.effort) args.push("--thinking", opts.effort);
+    const thinking = opts.effort || getProviderSettings("pi").thinkingLevel;
+    if (thinking) args.push("--thinking", thinking);
   }
   if (opts?.tools || opts?.readDirs?.length)
     args.push("--tools", "read,grep,find,ls");
@@ -154,6 +156,16 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
     const initial = await rpc.request("get_state", {}, 15_000);
     verifyPiSession(initial, launch.native);
     saveState(opts, initial, launch.configDir);
+    if (!opts.effort) {
+      const modelId =
+        initial.model?.provider && initial.model?.id
+          ? `${PI_PREFIX}${initial.model.provider}/${initial.model.id}`
+          : opts.model;
+      const thinking =
+        modelId && getProviderSettings("pi").preferredThinkingByModel[modelId];
+      if (thinking)
+        await rpc.request("set_thinking_level", { level: thinking });
+    }
     removeEvent = rpc.onRecord((event) => {
       if (event.type === "agent_start") runStarted = true;
       if (

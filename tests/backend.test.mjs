@@ -9,6 +9,7 @@ import {
   copyFileSync,
   chmodSync,
   rmSync,
+  statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -95,6 +96,24 @@ test("model routing supports Codex and Pi provider/model IDs", () => {
     modelId: "org/model",
   });
   assert.throws(() => backend.providerOf("haiku"));
+});
+
+test("legacy preferences initialize independent provider settings once", () => {
+  const settings = backend.getSettings();
+  assert.equal(settings.providers.codex.cliPath, codexPath);
+  assert.equal(settings.providers.pi.cliPath, piPath);
+  assert.equal(settings.providers.codex.configDir, codexDir);
+  assert.equal(settings.providers.pi.configDir, piDir);
+  assert.equal(settings.general.secondaryLanguage, "Chinese");
+  const file = join(dir, "support", "settings.json");
+  assert.equal(statSync(file).mode & 0o777, 0o600);
+  assert.ok(!readFileSync(file, "utf8").includes("fixture-key"));
+  const previous = process.env.CLI_AGENT_TEST_PREFERENCES;
+  process.env.CLI_AGENT_TEST_PREFERENCES = JSON.stringify({
+    codexPath: "/different-cli",
+  });
+  assert.equal(backend.getProviderSettings("codex").cliPath, codexPath);
+  process.env.CLI_AGENT_TEST_PREFERENCES = previous;
 });
 
 test("Codex preserves credentials, custom provider config, streaming and local thread resume", async () => {
@@ -503,4 +522,195 @@ test("old multi-agent bindings cannot be reused or silently rewritten", async ()
   assert.match(result.error.message, /legacy chat/);
   assert.equal(events().filter((e) => e.event === "launch").length, before);
   assert.equal(readFileSync(file, "utf8"), saved);
+});
+
+test("provider settings isolate defaults and environment overrides", async () => {
+  assert.equal(
+    typeof backend.updateProviderSettings,
+    "function",
+    "Provider settings need independent persisted records",
+  );
+  const codex = backend.getProviderSettings("codex");
+  const pi = backend.getProviderSettings("pi");
+  try {
+    backend.updateProviderSettings("codex", {
+      effort: "high",
+      webSearch: true,
+      environmentVariables: "CLI_AGENT_SCOPE=codex",
+    });
+    backend.updateProviderSettings("pi", {
+      thinkingLevel: "low",
+      environmentVariables: "CLI_AGENT_SCOPE=pi",
+    });
+    assert.equal(backend.getProviderSettings("codex").effort, "high");
+    assert.equal(backend.getProviderSettings("pi").thinkingLevel, "low");
+    assert.equal(backend.defaultOptions("codex:default").effort, undefined);
+    assert.equal(backend.defaultOptions("pi:default").effort, undefined);
+    assert.equal(backend.defaultOptions("pi:default").webSearch, undefined);
+    assert.equal(
+      backend.providerEnvironment("codex", {}).CLI_AGENT_SCOPE,
+      "codex",
+    );
+    assert.equal(backend.providerEnvironment("pi", {}).CLI_AGENT_SCOPE, "pi");
+  } finally {
+    if (typeof backend.updateProviderSettings === "function") {
+      backend.updateProviderSettings("codex", codex);
+      backend.updateProviderSettings("pi", pi);
+    }
+  }
+});
+
+test("provider model visibility, aliases and remembered choices are independent", () => {
+  const codex = backend.getProviderSettings("codex");
+  const pi = backend.getProviderSettings("pi");
+  try {
+    backend.updateProviderSettings("codex", {
+      customModels: ["codex:visible", "codex:hidden"],
+      visibleModels: ["codex:visible"],
+      modelAliases: { "codex:visible": "My Codex Model" },
+    });
+    backend.updateProviderSettings("pi", {
+      customModels: ["pi:custom/visible"],
+      modelAliases: { "pi:custom/visible": "My Pi Model" },
+    });
+    const models = backend.availableModels();
+    assert.ok(
+      models.some(
+        (m) => m.value === "codex:visible" && m.title === "My Codex Model",
+      ),
+    );
+    assert.ok(!models.some((m) => m.value === "codex:hidden"));
+    assert.ok(
+      models.some(
+        (m) => m.value === "pi:custom/visible" && m.title === "My Pi Model",
+      ),
+    );
+    backend.setCurrentModel("codex:visible");
+    backend.setCurrentModel("pi:custom/visible");
+    assert.equal(backend.currentModel("codex"), "codex:visible");
+    assert.equal(backend.currentModel("pi"), "pi:custom/visible");
+    backend.updateProviderSettings("codex", {
+      defaultModel: "codex:new-default",
+    });
+    assert.equal(backend.currentModel("codex"), "codex:new-default");
+    assert.equal(backend.currentModel("pi"), "pi:custom/visible");
+    assert.throws(
+      () =>
+        backend.updateProviderSettings("codex", { defaultModel: "pi:default" }),
+      /Choose a codex model/,
+    );
+  } finally {
+    backend.updateProviderSettings("codex", codex);
+    backend.updateProviderSettings("pi", pi);
+  }
+});
+
+test("provider response and thinking settings reach native CLI requests", async () => {
+  const codex = backend.getProviderSettings("codex");
+  const pi = backend.getProviderSettings("pi");
+  try {
+    backend.updateProviderSettings("codex", {
+      effort: "high",
+      responseVerbosity: "low",
+      responseStyle: "friendly",
+      reasoningSummary: "detailed",
+    });
+    const answer = await backend.runModel({
+      model: "codex:default",
+      prompt: "settings applied",
+    });
+    assert.equal(answer.isError, false, answer.error?.message);
+    assert.equal(
+      requests("thread/start").at(-1).record.params.config.model_verbosity,
+      "low",
+    );
+    assert.match(
+      requests("thread/start").at(-1).record.params.developerInstructions,
+      /warm, friendly/,
+    );
+    assert.equal(requests("turn/start").at(-1).record.params.effort, "high");
+    assert.equal(
+      requests("turn/start").at(-1).record.params.summary,
+      "detailed",
+    );
+    backend.updateProviderSettings("pi", {
+      thinkingLevel: "off",
+      preferredThinkingByModel: { "pi:custom/pi-local-model": "high" },
+    });
+    const result = await backend.runModel({
+      ...backend.defaultOptions("pi:default"),
+      model: "pi:default",
+      prompt: "Pi settings applied",
+    });
+    assert.equal(result.isError, false, result.error?.message);
+    const launch = events()
+      .filter((e) => e.provider === "pi" && e.event === "launch")
+      .at(-1);
+    assert.equal(launch.args[launch.args.indexOf("--thinking") + 1], "off");
+    assert.equal(requests("set_thinking_level").at(-1).record.level, "high");
+    const before = requests("set_thinking_level").length;
+    await backend.runModel({
+      model: "pi:default",
+      prompt: "Override model thinking",
+      effort: "low",
+    });
+    assert.equal(requests("set_thinking_level").length, before);
+  } finally {
+    backend.updateProviderSettings("codex", codex);
+    backend.updateProviderSettings("pi", pi);
+  }
+});
+
+test("disabled providers are hidden and rejected without launching a CLI", async () => {
+  const general = backend.getSettings().general;
+  const pi = backend.getProviderSettings("pi");
+  try {
+    backend.updateGeneralSettings({ defaultProvider: "pi" });
+    backend.updateProviderSettings("pi", { enabled: false });
+    assert.equal(backend.getSettings().general.defaultProvider, "codex");
+    assert.ok(
+      backend
+        .availableModels()
+        .every((model) => backend.providerOf(model.value) === "codex"),
+    );
+    const before = events().filter((e) => e.event === "launch").length;
+    const result = await backend.runModel({
+      model: "pi:default",
+      prompt: "must not be sent",
+      sessionId: "pi-chat",
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.error.message, /disabled/);
+    assert.equal(events().filter((e) => e.event === "launch").length, before);
+    assert.throws(
+      () => backend.updateProviderSettings("codex", { enabled: false }),
+      /at least one/,
+    );
+    assert.equal(backend.getProviderSettings("codex").enabled, true);
+  } finally {
+    backend.updateProviderSettings("pi", pi);
+    backend.updateGeneralSettings(general);
+  }
+});
+
+test("provider environment overrides are literal and validated without shell evaluation", () => {
+  assert.deepEqual(
+    backend.parseEnvironmentVariables(
+      "# comment\nTOKEN='a=b'\nexport EMPTY=\nLITERAL=$(touch /never-run)",
+    ),
+    { TOKEN: "a=b", EMPTY: "", LITERAL: "$(touch /never-run)" },
+  );
+  assert.throws(
+    () => backend.parseEnvironmentVariables("INVALID LINE WITH A SECRET"),
+    /line 1/,
+  );
+  const before = backend.getProviderSettings("pi");
+  assert.throws(
+    () =>
+      backend.updateProviderSettings("pi", {
+        environmentVariables: "INVALID VALUE",
+      }),
+    /line 1/,
+  );
+  assert.deepEqual(backend.getProviderSettings("pi"), before);
 });

@@ -1,5 +1,6 @@
 import { ModelError, RunOptions, RunResult, systemPrompt } from "../types";
-import { Provider } from "../provider";
+import { Provider, providerOf } from "../provider";
+import { getProviderSettings } from "../settings";
 
 export const APPROVAL_INSTRUCTIONS = [
   "File tools are read-only. Do not execute commands that modify files or processes.",
@@ -8,7 +9,17 @@ export const APPROVAL_INSTRUCTIONS = [
 ].join(" ");
 
 export function instructions(opts: RunOptions): string {
-  const prompt = systemPrompt(opts.systemPrompt);
+  let prompt = systemPrompt(opts.systemPrompt);
+  if (!opts.systemPrompt && opts.model && providerOf(opts.model) === "codex") {
+    const style = getProviderSettings("codex").responseStyle;
+    const instruction = {
+      default: "",
+      friendly: "Use a warm, friendly tone.",
+      pragmatic: "Use a practical, direct tone focused on actionable answers.",
+      none: "Use a neutral tone.",
+    }[style];
+    if (instruction) prompt += `\n\n${instruction}`;
+  }
   return opts.tools ? `${prompt}\n\n${APPROVAL_INSTRUCTIONS}` : prompt;
 }
 

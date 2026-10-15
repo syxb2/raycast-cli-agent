@@ -48,8 +48,8 @@ export function errorMarkdown(error: ModelError): string {
   switch (error.kind) {
     case "not-installed":
       return codex
-        ? "## Codex CLI not found\n\nInstall it: `brew install codex` (or `npm i -g @openai/codex`). The ChatGPT app also ships one.\n\nIf it lives elsewhere, set **Codex CLI Path** in the extension preferences."
-        : "## Pi Agent CLI not found\n\nInstall Pi Agent and set **Pi CLI Path** in the extension preferences if needed.";
+        ? "## Codex CLI not found\n\nInstall it: `brew install codex` (or `npm i -g @openai/codex`). The ChatGPT app also ships one.\n\nIf it lives elsewhere, set **CLI Path** in **Cli Agent Settings → Codex**."
+        : "## Pi Agent CLI not found\n\nInstall Pi Agent and set **CLI Path** in **Cli Agent Settings → Pi Agent** if needed.";
     case "not-logged-in":
       return codex
         ? `## Not logged in to Codex\n\nUse \`codex login\` or configure your provider credentials in the local Codex configuration.\n\n\`\`\`\n${error.message}\n\`\`\``

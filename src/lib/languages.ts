@@ -1,4 +1,4 @@
-import { getPreferenceValues } from "@raycast/api";
+import { getSettings } from "./settings";
 import { franc, francAll } from "franc-min";
 
 export interface Language {
@@ -41,11 +41,11 @@ export const LANGUAGES: Language[] = [
 export const AUTO = "auto";
 
 export function primaryLanguage(): string {
-  return getPreferenceValues<Preferences>().primaryLanguage || "English";
+  return getSettings().general.primaryLanguage || "English";
 }
 
 export function secondaryLanguage(): string {
-  return getPreferenceValues<Preferences>().secondaryLanguage || "English";
+  return getSettings().general.secondaryLanguage || "English";
 }
 
 function codeOf(name: string): string | undefined {
