@@ -21,7 +21,7 @@ npm ci
 npm run dev
 ```
 
-Choose **Codex (local configuration)** or **Pi Agent (local configuration)** in the extension's Default Model preference. The chosen model is shared across commands and remembered. Model menus also offer discovered models and manually entered Extra Models.
+Choose **Codex** or **Pi Agent** in the extension's Default Model preference. The chosen model is shared across commands and remembered. Model menus also offer discovered models and manually entered Extra Models.
 
 ```bash
 npm test                                     # Isolated backend protocol regression tests
@@ -41,9 +41,9 @@ The extension preserves provider credentials and exported environment variables.
 | Codex | `CODEX_HOME`, defaulting to `~/.codex`; includes `config.toml`, configured model providers and existing CLI authentication | `codex app-server --listen stdio://`, JSON-RPC initialize, thread start/resume and turn notifications |
 | Pi Agent | `PI_CODING_AGENT_DIR`, defaulting to `~/.pi/agent`; includes `settings.json`, `models.json` and `auth.json` | `pi --mode rpc`, state validation, prompt and streaming events |
 
-**Codex third-party models:** configure `model`, `model_provider` and the corresponding `[model_providers.<name>]` section in your existing `config.toml`, as you would for the CLI. Choose **Codex (local configuration)** to use that configuration. The backend does not pass `--ignore-user-config`, remove API keys or force the OpenAI provider. A third-party provider without a model-list endpoint still exposes its configured model in the menu.
+**Codex third-party models:** configure `model`, `model_provider` and the corresponding `[model_providers.<name>]` section in your existing `config.toml`, as you would for the CLI. Choose **Codex** to use that configuration. The backend does not pass `--ignore-user-config`, remove API keys or force the OpenAI provider. A third-party provider without a model-list endpoint still exposes its configured model in the menu.
 
-**Pi models:** choose **Pi Agent (local configuration)** to use Pi's locally resolved model. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry.
+**Pi models:** choose **Pi Agent** to use Pi's locally resolved model. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry.
 
 **Environment:** a login shell supplies exported API keys, proxy variables and PATH that a GUI process may lack. These values remain in memory. Restart the extension process after changing shell exports. Changes to the global CLI configuration files invalidate the cached model catalog and create a fresh Codex runtime while retaining native thread bindings.
 

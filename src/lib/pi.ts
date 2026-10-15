@@ -256,7 +256,7 @@ export async function fetchPiModels(): Promise<
   try {
     const response = await rpc.request("get_available_models", {}, 20_000);
     return [
-      { value: PI_DEFAULT, title: "Pi (local configuration)" },
+      { value: PI_DEFAULT, title: "Pi Agent" },
       ...(Array.isArray(response) ? response : (response.models ?? []))
         .filter((m: RecordValue) => m.provider && m.id)
         .map((m: RecordValue) => ({

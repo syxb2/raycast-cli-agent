@@ -28,8 +28,8 @@ export interface ModelCatalog {
 
 // Default selections preserve each CLI's local model and provider settings.
 export const FALLBACK_MODELS: ModelOption[] = [
-  { title: "Codex (local configuration)", value: CODEX_DEFAULT },
-  { title: "Pi (local configuration)", value: PI_DEFAULT },
+  { title: "Codex", value: CODEX_DEFAULT },
+  { title: "Pi Agent", value: PI_DEFAULT },
 ];
 
 function supportFile(name: string): string {
@@ -81,10 +81,10 @@ export function sameModel(a: string, b: string): boolean {
 }
 
 export function modelLabel(model: string): string {
+  if (model === CODEX_DEFAULT) return "Codex";
+  if (model === PI_DEFAULT) return "Pi Agent";
   const known = loadCatalog()?.models.find((m) => m.value === model);
   if (known) return known.title;
-  if (model === CODEX_DEFAULT) return "Codex (local configuration)";
-  if (model === PI_DEFAULT) return "Pi (local configuration)";
   if (!isSupportedModel(model)) return model;
   return model.slice(
     providerOf(model) === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length,
@@ -93,7 +93,11 @@ export function modelLabel(model: string): string {
 
 // CLI list (or fallback) + Extra Models preference + the current model if missing.
 export function availableModels(): ModelOption[] {
-  const list = [...(loadCatalog()?.models ?? FALLBACK_MODELS)];
+  const list = (loadCatalog()?.models ?? FALLBACK_MODELS).map((m) =>
+    m.value === CODEX_DEFAULT || m.value === PI_DEFAULT
+      ? { ...m, title: modelLabel(m.value) }
+      : m,
+  );
   const custom = (getPreferenceValues<Preferences>().customModels ?? "")
     .split(",")
     .map((s) => s.trim())

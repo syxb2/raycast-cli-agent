@@ -338,7 +338,7 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
     const models: CodexModel[] = [
       {
         value: CODEX_DEFAULT,
-        title: "Codex (local configuration)",
+        title: "Codex",
         description: config.model
           ? `Configured model: ${config.model}`
           : undefined,

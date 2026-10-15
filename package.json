@@ -130,11 +130,11 @@
       "default": "codex:default",
       "data": [
         {
-          "title": "Codex (local configuration)",
+          "title": "Codex",
           "value": "codex:default"
         },
         {
-          "title": "Pi Agent (local configuration)",
+          "title": "Pi Agent",
           "value": "pi:default"
         }
       ]
