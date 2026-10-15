@@ -14,7 +14,6 @@ import {
   autoLabel,
   LANGUAGES,
   resolveTranslation,
-  RETRY_MODEL,
 } from "./lib/languages";
 import { useModels } from "./lib/modelCatalog";
 import { currentModel, modelLabel, setCurrentModel } from "./lib/models";
@@ -22,6 +21,7 @@ import { readSourceText } from "./lib/selection";
 import { RetryReason, translateText } from "./lib/translation";
 import { useModelStream } from "./lib/useModelStream";
 import { RunResult } from "./lib/types";
+import { runModel } from "./lib/run";
 
 // Like Raycast's Translate: the search bar is the input and translation starts
 // when typing pauses. Each request takes ~3 s, so keystrokes are debounced
@@ -63,13 +63,17 @@ export default function Command() {
     if (!ready || !language) return;
     const input = text.trim();
     if (!input) {
+      lastRequest.current = "";
       stream.stop();
+      setBusy(false);
+      setDone(undefined);
       return;
     }
     const key = `${model}:${language}:${input}`;
     if (key === lastRequest.current) return;
+    lastRequest.current = key;
+    const ac = new AbortController();
     const t = setTimeout(async () => {
-      lastRequest.current = key;
       setRetries([]);
       setDone(undefined);
       setBusy(true);
@@ -91,13 +95,19 @@ export default function Command() {
           if (lastRequest.current !== key) return;
           setRetries((r) => [...r, reason]);
         },
+        runModel,
+        ac.signal,
       );
       if (lastRequest.current !== key) return;
       setTarget(outcome.direction.target);
       setDone(outcome.result);
       setBusy(false);
     }, DEBOUNCE_MS);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+      if (lastRequest.current === key) lastRequest.current = "";
+    };
   }, [text, language, model, ready]);
 
   const changeModel = (value: string) => {
@@ -201,7 +211,7 @@ function subtitle(model: string, retries: RetryReason[]): string {
   const notes = retries.map((r) =>
     r === "reversed" ? "reversed direction" : "wrong language",
   );
-  const used = retries.includes("wrong-language") ? RETRY_MODEL : model;
+  const used = model;
   return notes.length
     ? `${modelLabel(used)} (retried: ${notes.join(", ")})`
     : modelLabel(used);

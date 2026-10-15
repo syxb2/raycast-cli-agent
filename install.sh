@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installs or updates CLI Assistant.
-#   curl -fsSL https://raw.githubusercontent.com/umitaltintas/raycast-cli-assistant/main/install.sh | bash
+# Installs or updates Cli Agent.
+#   curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/install.sh | bash
 #
 # No Node, npm or git needed: downloads the prebuilt package from the latest
 # GitHub release, puts it into Raycast's extensions folder and registers it
@@ -8,28 +8,28 @@
 # settings are kept.
 set -euo pipefail
 
-REPO="umitaltintas/raycast-cli-assistant"
-NAME="claude-cli" # "name" in package.json; the Raycast extension id
-# Pass --spotlight (curl ... | bash -s -- --spotlight) to also create an
-# "Ask AI" app that Spotlight finds; once created, updates keep it current.
+REPO="syxb2/raycast-cli-agent"
+NAME="raycast-cli-agent" # "name" in package.json; the Raycast extension id
+# Pass --spotlight (curl ... | bash -s -- --spotlight) to also create a
+# "Cli Agent" app that Spotlight finds; once created, updates keep it current.
 SPOTLIGHT=0
 for arg in "$@"; do
   [ "$arg" = "--spotlight" ] && SPOTLIGHT=1
 done
-SPOTLIGHT_APP="$HOME/Applications/Ask AI.app"
+SPOTLIGHT_APP="$HOME/Applications/Cli Agent.app"
 [ -d "$SPOTLIGHT_APP" ] && SPOTLIGHT=1
-# CLI_ASSISTANT_ASSET_URL is for testing only (file:// works too).
-ASSET_URL="${CLI_ASSISTANT_ASSET_URL:-https://github.com/$REPO/releases/latest/download/cli-assistant.tar.gz}"
+# RAYCAST_CLI_AGENT_ASSET_URL is for testing only (file:// works too).
+ASSET_URL="${RAYCAST_CLI_AGENT_ASSET_URL:-https://github.com/$REPO/releases/latest/download/raycast-cli-agent.tar.gz}"
 DEST="$HOME/.config/raycast/extensions/$NAME"
 # `ray develop` reports a source folder (cwd) on registration; give it a stable one.
-HOME_DIR="$HOME/.local/share/raycast-cli-assistant"
+HOME_DIR="$HOME/.local/share/raycast-cli-agent"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die() { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
-bold "Installing CLI Assistant"
+bold "Installing Cli Agent"
 
 [ "$(uname -s)" = "Darwin" ] || die "Only macOS is supported."
 
@@ -41,16 +41,14 @@ fi
 
 # Either CLI is enough; a missing one doesn't stop the install, the extension
 # explains what to do on first use.
-CLAUDE=""
-for c in "$HOME/.local/bin/claude" /opt/homebrew/bin/claude /usr/local/bin/claude; do
-  [ -x "$c" ] && { CLAUDE="$c"; break; }
+PI=""
+for c in /opt/homebrew/bin/pi /usr/local/bin/pi "$HOME/.local/bin/pi" "$HOME/.npm-global/bin/pi" "$HOME/.bun/bin/pi"; do
+  [ -x "$c" ] && { PI="$c"; break; }
 done
-if [ -z "$CLAUDE" ]; then
-  warn "Claude Code not found (optional). Install: curl -fsSL https://claude.ai/install.sh | bash"
-elif "$CLAUDE" auth status >/dev/null 2>&1; then
-  ok "Claude Code installed and signed in"
+if [ -z "$PI" ]; then
+  warn "Pi Agent not found (optional). Install Pi and configure its local provider, then set Pi CLI Path if needed."
 else
-  warn "Claude Code is installed but not signed in. In a terminal: claude  →  /login"
+  ok "Pi Agent installed ($PI); its local settings and authentication will be reused"
 fi
 
 CODEX=""
@@ -63,19 +61,19 @@ if [ -z "$CODEX" ]; then
 elif "$CODEX" login status >/dev/null 2>&1; then
   ok "Codex installed and signed in ($CODEX)"
 else
-  warn "Codex is installed but not signed in. In a terminal: '$CODEX' login"
+  warn "Codex is installed; configure its local provider credentials or run: '$CODEX' login"
 fi
 
-[ -n "$CLAUDE$CODEX" ] || warn "Install at least one of Claude Code or Codex to use the extension."
+[ -n "$PI$CODEX" ] || warn "Install at least one of Codex or Pi Agent to use the extension."
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 # The releases/latest/download redirect can point to the previous version for
 # a few minutes after a release (seen 2026-10-11); ask the API for the tag first.
-if [ -z "${CLI_ASSISTANT_ASSET_URL:-}" ]; then
+if [ -z "${RAYCAST_CLI_AGENT_ASSET_URL:-}" ]; then
   TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
     /usr/bin/python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])' 2>/dev/null || true)"
-  [ -n "$TAG" ] && ASSET_URL="https://github.com/$REPO/releases/download/$TAG/cli-assistant.tar.gz"
+  [ -n "$TAG" ] && ASSET_URL="https://github.com/$REPO/releases/download/$TAG/raycast-cli-agent.tar.gz"
 fi
 curl -fsSL "$ASSET_URL" -o "$TMP/pkg.tar.gz" || die "Download failed: $ASSET_URL"
 mkdir "$TMP/pkg"
@@ -112,7 +110,7 @@ if [ "$SPOTLIGHT" = 1 ]; then
       sips -z $((s * 2)) $((s * 2)) "$DEST/assets/extension-icon.png" --out "$W/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
     done
     iconutil -c icns "$W/icon.iconset" -o "$SPOTLIGHT_APP/Contents/Resources/applet.icns"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string io.github.umitaltintas.ask-ai" "$SPOTLIGHT_APP/Contents/Info.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string io.github.syxb2.raycast-cli-agent" "$SPOTLIGHT_APP/Contents/Info.plist" 2>/dev/null || true
     codesign --force --deep -s - "$SPOTLIGHT_APP" 2>/dev/null || true
     rm -rf "$W"
     mdimport "$SPOTLIGHT_APP" 2>/dev/null || true
@@ -123,15 +121,15 @@ if [ "$SPOTLIGHT" = 1 ]; then
 fi
 
 echo
-bold "Done. Search for \"CLI Assistant\" commands in Raycast."
+bold "Done. Search for \"Cli Agent\" commands in Raycast."
 cat <<'EOF'
   Next steps:
-  • Set your Primary Language: Raycast Settings → Extensions → CLI Assistant
+  • Set your Primary Language: Raycast Settings → Extensions → Cli Agent
   • Make Ask AI a fallback command, and give hotkeys to Translate and Replace
     or Fix Spelling and Grammar
   • To update, run this command again
   • To uninstall, press ⌘K on any of its commands in Raycast → Uninstall Extension
 EOF
 if [ "$SPOTLIGHT" = 1 ]; then
-  echo '  • Spotlight: type "Ask AI". To remove it, delete ~/Applications/Ask AI.app'
+  echo '  • Spotlight: type "Cli Agent". To remove it, delete ~/Applications/Cli Agent.app'
 fi

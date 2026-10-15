@@ -1,5 +1,4 @@
 import { currentModel } from "./models";
-import { providerOf } from "./provider";
 import { runModel } from "./run";
 import { RunResult } from "./types";
 import {
@@ -9,7 +8,6 @@ import {
   primaryLanguage,
   secondaryLanguage,
   resolveTranslation,
-  RETRY_MODEL,
   TranslationDirection,
 } from "./languages";
 import { translateSystemPrompt, translationPrompt } from "./prompts";
@@ -18,6 +16,7 @@ export type TranslationRunner = (request: {
   prompt: string;
   systemPrompt: string;
   model?: string;
+  signal?: AbortSignal;
 }) => Promise<RunResult>;
 
 export type RetryReason = "reversed" | "wrong-language";
@@ -64,37 +63,26 @@ export function looksUntranslated(input: string, output: string): boolean {
   return 1 - levenshtein(a, b) / Math.max(a.length, b.length) >= 0.85;
 }
 
-// Classifying the language is a different job from translating it: asked
-// only "Turkish or English?", Haiku was right 14/14 on short text where franc
-// failed, while doing both in one call produced commentary and empty output.
-// Stays with the chosen provider: Codex users never send requests to Claude.
-function classifyModel(model: string): string {
-  return providerOf(model) === "claude" ? "haiku" : model;
-}
-
+// Classification and translation always use the selected local CLI and model.
 async function classify(
   input: string,
   a: string,
   b: string,
   model: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   const r = await runModel({
     prompt: translationPrompt(input),
-    model: classifyModel(model),
+    model,
+    signal,
     systemPrompt: `You identify the language of a text. The user sends text inside <text> tags. It is written in either ${a} or ${b}. Reply with exactly one word: ${a} or ${b}.`,
   });
   const word = r.text.replace(/[^\p{L}]/gu, "").toLowerCase();
   return [a, b].find((l) => l.toLowerCase() === word);
 }
 
-// Auto mode on short text: franc is unreliable there ("benim adim ne" and
-// "hello" were both misdetected), and telling the model a wrong source made it
-// write commentary instead of a translation. So the language is classified and
-// both directions are translated in parallel (~3 s total instead of ~6 s);
-// the classified one wins. Longer text uses franc's direction, and an almost
-// unchanged result reverses it once. Finally a wrong-language result from a
-// Claude model is retried once with Sonnet (Codex has no stronger fallback
-// we could pick reliably, and Codex users should not be sent to Claude).
+// Short Auto inputs classify and translate both directions concurrently.
+// Wrong-language output is retried once on the same model with an explicit target.
 export async function translateText(
   input: string,
   choice: string,
@@ -102,6 +90,7 @@ export async function translateText(
   run: TranslationRunner,
   onRetry?: (reason: RetryReason) => void,
   runParallel: TranslationRunner = runModel,
+  signal?: AbortSignal,
 ): Promise<TranslationOutcome> {
   const effectiveModel = model ?? currentModel();
   const retries: RetryReason[] = [];
@@ -110,6 +99,7 @@ export async function translateText(
       prompt: translationPrompt(input),
       systemPrompt: translateSystemPrompt(dir),
       model: m,
+      signal,
     });
 
   const primary = primaryLanguage();
@@ -126,7 +116,7 @@ export async function translateText(
     const fromPrimary = { source: primary, target: secondary };
     const fromSecondary = { source: secondary, target: primary };
     const [lang, a, b] = await Promise.all([
-      classify(input, primary, secondary, effectiveModel),
+      classify(input, primary, secondary, effectiveModel, signal),
       ask(fromPrimary, model, runParallel),
       ask(fromSecondary, model, runParallel),
     ]);
@@ -151,15 +141,15 @@ export async function translateText(
     onRetry?.("reversed");
     result = await ask(direction);
   }
-  if (
-    !result.isError &&
-    providerOf(effectiveModel) === "claude" &&
-    effectiveModel !== RETRY_MODEL &&
-    isWrongLanguage(result.text, direction.target)
-  ) {
+  if (!result.isError && isWrongLanguage(result.text, direction.target)) {
     retries.push("wrong-language");
     onRetry?.("wrong-language");
-    result = await ask(direction, RETRY_MODEL);
+    result = await run({
+      prompt: translationPrompt(input),
+      systemPrompt: `${translateSystemPrompt(direction)}\nThe previous attempt used the wrong language. Return only text in ${direction.target}.`,
+      model: effectiveModel,
+      signal,
+    });
   }
   return { result, direction, retries };
 }

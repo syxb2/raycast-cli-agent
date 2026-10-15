@@ -127,9 +127,6 @@ export function isWrongLanguage(output: string, target: string): boolean {
   return targetScore < 0.8;
 }
 
-// Used for the single retry after a wrong-language translation.
-export const RETRY_MODEL = "sonnet";
-
 export function autoLabel(): string {
   const primary = primaryLanguage();
   const secondary = secondaryLanguage();

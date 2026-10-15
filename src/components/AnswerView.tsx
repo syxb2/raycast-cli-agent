@@ -9,9 +9,20 @@ import {
 import { useEffect, useState } from "react";
 import { errorMarkdown, rateLimitLines } from "../lib/format";
 import { stepsMarkdown } from "../lib/steps";
-import { currentModel, modelLabel, setCurrentModel } from "../lib/models";
+import {
+  currentModel,
+  modelLabel,
+  modelsForProvider,
+  setCurrentModel,
+} from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
-import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
+import { providerOf } from "../lib/provider";
+import {
+  defaultOptions,
+  optionBadges,
+  optionsForModel,
+  RequestOptions,
+} from "../lib/options";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
 import { ChatView, commandsMarkdown } from "./ChatView";
@@ -36,8 +47,8 @@ export interface AnswerViewProps {
 export function AnswerView(props: AnswerViewProps) {
   const { push } = useNavigation();
   const [model, setModel] = useState(currentModel);
-  const [options, setOptions] = useState<RequestOptions>(
-    () => props.options ?? {},
+  const [options, setOptions] = useState<RequestOptions>(() =>
+    optionsForModel(props.options ?? {}, currentModel()),
   );
   // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -63,8 +74,10 @@ export function AnswerView(props: AnswerViewProps) {
   }, [sessionId, model]);
 
   const regenerate = (m = model) => {
+    if (providerOf(m) !== providerOf(model)) return;
     setCurrentModel(m);
     setModel(m);
+    setOptions((o) => optionsForModel(o, m));
     setSessionId(crypto.randomUUID());
   };
 
@@ -106,7 +119,7 @@ export function AnswerView(props: AnswerViewProps) {
 
   return (
     <Detail
-      navigationTitle={props.navigationTitle ?? "CLI Assistant"}
+      navigationTitle={props.navigationTitle ?? "Cli Agent"}
       isLoading={stream.isLoading}
       markdown={markdown}
       metadata={
@@ -188,11 +201,16 @@ export function AnswerView(props: AnswerViewProps) {
               <ModelSubmenu
                 title="Ask Another Model"
                 current={model}
-                models={catalog.models}
+                models={modelsForProvider(
+                  catalog.models,
+                  providerOf(model),
+                  model,
+                )}
                 onSelect={regenerate}
                 onRefresh={() => catalog.refresh(true)}
               />
               <OptionActions
+                model={model}
                 options={options}
                 onChange={changeOptions}
                 showTools={!options.readDirs}

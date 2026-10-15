@@ -1,5 +1,5 @@
 # On a v* tag, builds the extension and creates a GitHub Release with the
-# cli-assistant.tar.gz package that install.sh downloads.
+# raycast-cli-agent.tar.gz package that install.sh downloads.
 name: Release
 
 on:
@@ -22,17 +22,23 @@ jobs:
 
       - run: npm ci
 
+      - name: Verify backend
+        run: |
+          npm test
+          npx eslint src tests
+          npx prettier --check src tests package.json
+
       - name: Build
         run: |
           npx ray build -e dist -o dist -I
           rm -f dist/*.map
           cp -R spotlight dist/spotlight
           echo "${GITHUB_REF_NAME}" > dist/VERSION
-          tar -czf cli-assistant.tar.gz -C dist .
+          tar -czf raycast-cli-agent.tar.gz -C dist .
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" cli-assistant.tar.gz \
+          gh release create "$GITHUB_REF_NAME" raycast-cli-agent.tar.gz \
             --title "$GITHUB_REF_NAME" --generate-notes

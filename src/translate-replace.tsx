@@ -1,7 +1,7 @@
 import { LocalStorage } from "@raycast/api";
 import { runModel } from "./lib/run";
-import { AUTO, RETRY_MODEL } from "./lib/languages";
-import { modelLabel } from "./lib/models";
+import { AUTO } from "./lib/languages";
+import { currentModel, modelLabel } from "./lib/models";
 import { rewriteSelection } from "./lib/rewrite";
 import { translateText } from "./lib/translation";
 
@@ -20,7 +20,7 @@ export default async function Command() {
         toast.title =
           reason === "reversed"
             ? "Already in that language, reversing…"
-            : `Retrying with ${modelLabel(RETRY_MODEL)}…`;
+            : `Retrying with ${modelLabel(currentModel())}…`;
       },
     );
     return result;

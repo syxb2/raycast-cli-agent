@@ -1,8 +1,21 @@
 import { environment, LocalStorage } from "@raycast/api";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { RequestOptions } from "./options";
 import { RateLimit } from "./types";
+import {
+  CODEX_DEFAULT,
+  Provider,
+  isSupportedModel,
+  providerOf,
+} from "./provider";
+import { claimSessionProvider, deleteSessionBinding } from "./backend/sessions";
 
 export interface Message {
   id: string;
@@ -10,7 +23,7 @@ export interface Message {
   answer: string;
   createdAt: number;
   error?: string;
-  // The model can change mid-chat; --resume keeps the context.
+  // Record the model used for this answer within the chat's fixed agent.
   model?: string;
   // Shell commands the model asked to run, until approved or dismissed.
   commands?: string[];
@@ -20,7 +33,8 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  // Claude Code session; follow-ups attach to it with --resume.
+  readonly provider: Provider;
+  // Stable local identity; the backend owns native thread/session bindings.
   sessionId: string;
   title: string;
   model: string;
@@ -43,7 +57,7 @@ function dir(): string {
 
 export type ConversationSummary = Pick<
   Conversation,
-  "id" | "title" | "model" | "updatedAt"
+  "id" | "title" | "provider" | "model" | "updatedAt"
 >;
 
 export async function listConversations(): Promise<ConversationSummary[]> {
@@ -54,28 +68,64 @@ export async function listConversations(): Promise<ConversationSummary[]> {
 
 export function loadConversation(id: string): Conversation | undefined {
   try {
-    return JSON.parse(readFileSync(join(dir(), `${id}.json`), "utf8"));
+    const conversation: Conversation = JSON.parse(
+      readFileSync(join(dir(), `${id}.json`), "utf8"),
+    );
+    if (!isSupportedModel(conversation.model))
+      conversation.model = CODEX_DEFAULT;
+    const provider = conversation.provider ?? providerOf(conversation.model);
+    if (provider !== providerOf(conversation.model)) return undefined;
+    return { ...conversation, provider };
   } catch {
     return undefined;
   }
 }
 
+let indexWrite: Promise<void> = Promise.resolve();
+
+function updateIndex(
+  update: (index: ConversationSummary[]) => ConversationSummary[],
+): Promise<void> {
+  const operation = indexWrite
+    .catch(() => {})
+    .then(async () => {
+      await LocalStorage.setItem(
+        INDEX_KEY,
+        JSON.stringify(update(await listConversations())),
+      );
+    });
+  indexWrite = operation;
+  return operation;
+}
+
 export async function saveConversation(c: Conversation): Promise<void> {
-  writeFileSync(join(dir(), `${c.id}.json`), JSON.stringify(c));
-  const index = (await listConversations()).filter((s) => s.id !== c.id);
-  index.push({
-    id: c.id,
-    title: c.title,
-    model: c.model,
-    updatedAt: c.updatedAt,
-  });
-  await LocalStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  if (providerOf(c.model) !== c.provider)
+    throw new Error("A chat's model must belong to its bound agent.");
+  const previous = loadConversation(c.id);
+  if (previous && previous.provider !== c.provider)
+    throw new Error("A chat's agent cannot be changed. Start a new chat.");
+  claimSessionProvider(c.sessionId, c.provider);
+  const file = join(dir(), `${c.id}.json`);
+  const temp = `${file}.${crypto.randomUUID()}.tmp`;
+  writeFileSync(temp, JSON.stringify(c), { mode: 0o600 });
+  renameSync(temp, file);
+  await updateIndex((items) => [
+    ...items.filter((s) => s.id !== c.id),
+    {
+      id: c.id,
+      title: c.title,
+      provider: c.provider,
+      model: c.model,
+      updatedAt: c.updatedAt,
+    },
+  ]);
 }
 
 export async function deleteConversation(id: string): Promise<void> {
+  const conversation = loadConversation(id);
   rmSync(join(dir(), `${id}.json`), { force: true });
-  const index = (await listConversations()).filter((s) => s.id !== id);
-  await LocalStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  if (conversation) deleteSessionBinding(conversation.sessionId);
+  await updateIndex((items) => items.filter((s) => s.id !== id));
 }
 
 export function newConversation(
@@ -85,6 +135,7 @@ export function newConversation(
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
+    provider: providerOf(model),
     sessionId: crypto.randomUUID(),
     title: "",
     model,

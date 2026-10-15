@@ -1,8 +1,10 @@
 import { getPreferenceValues } from "@raycast/api";
+import { currentModel } from "./models";
+import { providerOf } from "./provider";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
-// Both CLIs take the same levels: claude --effort, codex model_reasoning_effort.
+// Codex turn effort and Pi thinking levels. Support depends on the selected model.
 export const EFFORTS: { value: Effort; title: string }[] = [
   { value: "low", title: "Low" },
   { value: "medium", title: "Medium" },
@@ -23,10 +25,11 @@ export interface RequestOptions {
   readDirs?: string[];
 }
 
-export function defaultOptions(): RequestOptions {
+export function defaultOptions(model = currentModel()): RequestOptions {
   const prefs = getPreferenceValues<Preferences>();
   return {
-    webSearch: prefs.webSearch || undefined,
+    webSearch:
+      providerOf(model) === "codex" ? prefs.webSearch || undefined : undefined,
     effort: (prefs.effort as Effort) || undefined,
     tools: prefs.chatTools || undefined,
   };
@@ -43,4 +46,13 @@ export function optionBadges(o: RequestOptions | undefined): string[] {
   if (o?.tools) badges.push("Tools");
   if (o?.effort) badges.push(effortTitle(o.effort));
   return badges;
+}
+
+export function optionsForModel(
+  options: RequestOptions,
+  model: string,
+): RequestOptions {
+  return providerOf(model) === "pi"
+    ? { ...options, webSearch: undefined }
+    : options;
 }

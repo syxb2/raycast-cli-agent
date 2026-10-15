@@ -1,7 +1,15 @@
 import { environment, getPreferenceValues } from "@raycast/api";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CODEX_DEFAULT, CODEX_PREFIX, Provider, providerOf } from "./provider";
+import {
+  CODEX_DEFAULT,
+  CODEX_PREFIX,
+  PI_DEFAULT,
+  PI_PREFIX,
+  Provider,
+  isSupportedModel,
+  providerOf,
+} from "./provider";
 
 export interface ModelOption {
   title: string;
@@ -12,18 +20,16 @@ export interface ModelOption {
 }
 
 export interface ModelCatalog {
+  version: 2;
+  fingerprint: string;
   fetchedAt: number;
   models: ModelOption[];
 }
 
-// Used when no list could be fetched yet. Aliases on purpose: the CLI resolves
-// them to the newest version automatically.
+// Default selections preserve each CLI's local model and provider settings.
 export const FALLBACK_MODELS: ModelOption[] = [
-  { title: "Haiku", value: "haiku" },
-  { title: "Sonnet", value: "sonnet" },
-  { title: "Opus", value: "opus" },
-  { title: "Fable", value: "fable" },
-  { title: "Codex (default model)", value: CODEX_DEFAULT },
+  { title: "Codex (local configuration)", value: CODEX_DEFAULT },
+  { title: "Pi (local configuration)", value: PI_DEFAULT },
 ];
 
 function supportFile(name: string): string {
@@ -36,11 +42,14 @@ function supportFile(name: string): string {
 export function currentModel(): string {
   try {
     const saved = readFileSync(supportFile("current-model"), "utf8").trim();
-    if (saved) return saved;
+    if (isSupportedModel(saved)) return saved;
   } catch {
     // nothing chosen yet
   }
-  return getPreferenceValues<Preferences>().model || "haiku";
+  const configured = getPreferenceValues<Preferences>().model;
+  return configured && isSupportedModel(configured)
+    ? configured
+    : CODEX_DEFAULT;
 }
 
 export function setCurrentModel(model: string): void {
@@ -49,7 +58,10 @@ export function setCurrentModel(model: string): void {
 
 export function loadCatalog(): ModelCatalog | undefined {
   try {
-    return JSON.parse(readFileSync(supportFile("models.json"), "utf8"));
+    const catalog = JSON.parse(
+      readFileSync(supportFile("models.json"), "utf8"),
+    );
+    return catalog.version === 2 ? catalog : undefined;
   } catch {
     return undefined;
   }
@@ -59,7 +71,7 @@ export function saveCatalog(catalog: ModelCatalog): void {
   writeFileSync(supportFile("models.json"), JSON.stringify(catalog));
 }
 
-// "opus" and "claude-opus-5-5" can be the same model; both count as selected.
+// Resolved aliases can share one selected catalog entry.
 export function sameModel(a: string, b: string): boolean {
   if (a === b) return true;
   const models = loadCatalog()?.models ?? [];
@@ -71,12 +83,12 @@ export function sameModel(a: string, b: string): boolean {
 export function modelLabel(model: string): string {
   const known = loadCatalog()?.models.find((m) => m.value === model);
   if (known) return known.title;
-  if (model === CODEX_DEFAULT) return "Codex (default model)";
-  if (providerOf(model) === "codex") return model.slice(CODEX_PREFIX.length);
-  const m = model.match(/^claude-([a-z]+)-(\d+)-(\d+)(\[1m\])?$/i);
-  if (!m) return model;
-  const name = `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
-  return m[4] ? `${name} (1M)` : name;
+  if (model === CODEX_DEFAULT) return "Codex (local configuration)";
+  if (model === PI_DEFAULT) return "Pi (local configuration)";
+  if (!isSupportedModel(model)) return model;
+  return model.slice(
+    providerOf(model) === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length,
+  );
 }
 
 // CLI list (or fallback) + Extra Models preference + the current model if missing.
@@ -85,7 +97,10 @@ export function availableModels(): ModelOption[] {
   const custom = (getPreferenceValues<Preferences>().customModels ?? "")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((model) =>
+      isSupportedModel(model) ? model : `${CODEX_PREFIX}${model}`,
+    );
   for (const value of [...custom, currentModel()]) {
     if (!list.some((m) => sameModel(m.value, value))) {
       list.push({ title: modelLabel(value), value });
@@ -99,14 +114,31 @@ export function matchingValue(model: string, list: ModelOption[]): string {
   return list.find((m) => sameModel(m.value, model))?.value ?? model;
 }
 
-// Splits a model list into provider sections for menus, Claude first.
+// Groups models by the native CLI that owns them.
 export function groupByProvider(
   models: ModelOption[],
 ): { provider: Provider; models: ModelOption[] }[] {
-  return (["claude", "codex"] as Provider[])
+  return (["codex", "pi"] as Provider[])
     .map((provider) => ({
       provider,
       models: models.filter((m) => providerOf(m.value) === provider),
     }))
     .filter((g) => g.models.length > 0);
+}
+
+// Chats offer models only from their bound agent, including an older selection.
+export function modelsForProvider(
+  models: ModelOption[],
+  provider: Provider,
+  current?: string,
+): ModelOption[] {
+  const list = models.filter((m) => providerOf(m.value) === provider);
+  if (
+    current &&
+    providerOf(current) === provider &&
+    !list.some((m) => sameModel(m.value, current))
+  ) {
+    list.push({ value: current, title: modelLabel(current) });
+  }
+  return list;
 }

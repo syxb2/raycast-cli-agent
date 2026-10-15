@@ -22,28 +22,17 @@ function webStep(queryOrUrl: string): string {
 
 export const SEARCHING_STEP = "🔎 Searching the web…";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function claudeStep(name: string, input: any): string | undefined {
-  switch (name) {
-    case "Bash":
-      return input?.command ? `💻 Ran ${code(input.command)}` : undefined;
-    case "Read":
-      return input?.file_path
-        ? `📄 Read ${shortPath(input.file_path)}`
-        : undefined;
-    case "Glob":
-      return input?.pattern ? `🗂 Looked for ${code(input.pattern)}` : undefined;
-    case "Grep":
-      return input?.pattern
-        ? `🗂 Searched files for ${code(input.pattern)}`
-        : undefined;
-    case "WebSearch":
-      return input?.query ? webStep(input.query) : SEARCHING_STEP;
-    case "WebFetch":
-      return input?.url ? webStep(input.url) : undefined;
-    default:
-      return undefined;
-  }
+export function piToolStep(
+  name: string,
+  input: Record<string, unknown>,
+): string {
+  if (name === "read")
+    return `📄 Read ${shortPath(String(input.path || input.file_path || "file"))}`;
+  if (name === "grep")
+    return `🗂 Searched files for ${code(String(input.pattern || ""))}`;
+  if (name === "find" || name === "ls")
+    return `🗂 Listed ${shortPath(String(input.path || input.pattern || "."))}`;
+  return `🔧 Used ${name}`;
 }
 
 // Codex reports commands wrapped as /bin/zsh -lc '<command>' (or "<command>").

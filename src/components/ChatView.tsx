@@ -16,12 +16,23 @@ import {
   groupByProvider,
   matchingValue,
   modelLabel,
+  modelsForProvider,
   setCurrentModel,
 } from "../lib/models";
-import { withMissingContext } from "../lib/chatContext";
 import { useModels } from "../lib/modelCatalog";
-import { defaultOptions, optionBadges, RequestOptions } from "../lib/options";
-import { PROVIDER_NAMES } from "../lib/provider";
+import {
+  defaultOptions,
+  optionBadges,
+  optionsForModel,
+  RequestOptions,
+} from "../lib/options";
+import {
+  CODEX_DEFAULT,
+  PI_DEFAULT,
+  Provider,
+  PROVIDER_NAMES,
+  providerOf,
+} from "../lib/provider";
 import { commandResultPrompt, runApprovedCommand } from "../lib/shell";
 import {
   Conversation,
@@ -56,6 +67,11 @@ export function ChatView({
   const [pendingId, setPendingId] = useState<string | undefined>();
   const stream = useModelStream();
   const catalog = useModels();
+  const models = modelsForProvider(
+    catalog.models,
+    conversation.provider,
+    conversation.model,
+  );
   const sentFirst = useRef(false);
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
@@ -74,7 +90,7 @@ export function ChatView({
       question: q,
       answer: "",
       createdAt: Date.now(),
-      model: conversation.model,
+      model: from.model,
     };
     const base: Conversation = {
       ...from,
@@ -87,7 +103,7 @@ export function ChatView({
     setPendingId(msg.id);
 
     const result = await stream.run({
-      prompt: withMissingContext(from.messages, from.model, prompt ?? q),
+      prompt: prompt ?? q,
       model: from.model,
       sessionId: from.sessionId,
       ...from.options,
@@ -134,9 +150,21 @@ export function ChatView({
     return () => clearTimeout(timer);
   }, [autoRun]);
 
-  const startNew = () => {
+  const startNew = (provider: Provider = conversation.provider) => {
     stream.stop();
-    const fresh = newConversation(conversation.model, conversation.options);
+    const model =
+      provider === conversation.provider
+        ? conversation.model
+        : provider === "codex"
+          ? CODEX_DEFAULT
+          : PI_DEFAULT;
+    const fresh = newConversation(
+      model,
+      provider === conversation.provider
+        ? conversation.options
+        : defaultOptions(model),
+    );
+    setCurrentModel(model);
     activeId.current = fresh.id;
     setPendingId(undefined);
     setConversation(fresh);
@@ -145,8 +173,15 @@ export function ChatView({
   };
 
   const changeModel = (model: string) => {
+    if (providerOf(model) !== conversation.provider) return;
     setCurrentModel(model);
-    setConversation((c) => ({ ...c, model }));
+    const updated = {
+      ...conversation,
+      model,
+      options: optionsForModel(conversation.options ?? {}, model),
+    };
+    setConversation(updated);
+    if (updated.messages.length) void saveConversation(updated);
   };
 
   const changeOptions = (options: RequestOptions) => {
@@ -215,12 +250,12 @@ export function ChatView({
       onSelectionChange={(id) => id && setSelectedId(id)}
       searchBarAccessory={
         <List.Dropdown
-          tooltip="Model"
+          tooltip={`Model (${PROVIDER_NAMES[conversation.provider]})`}
           isLoading={catalog.isRefreshing}
-          value={matchingValue(conversation.model, catalog.models)}
+          value={matchingValue(conversation.model, models)}
           onChange={changeModel}
         >
-          {groupByProvider(catalog.models).map((g) => (
+          {groupByProvider(models).map((g) => (
             <List.Dropdown.Section
               key={g.provider}
               title={PROVIDER_NAMES[g.provider]}
@@ -245,6 +280,7 @@ export function ChatView({
             onRefreshModels={() => catalog.refresh(true)}
           />
           <OptionActions
+            model={conversation.model}
             options={conversation.options ?? {}}
             onChange={changeOptions}
             showTools
@@ -333,6 +369,7 @@ export function ChatView({
                     onRefreshModels={() => catalog.refresh(true)}
                   />
                   <OptionActions
+                    model={conversation.model}
                     options={conversation.options ?? {}}
                     onChange={changeOptions}
                     showTools
@@ -352,7 +389,7 @@ function ChatActions({
   onHistory,
   onRefreshModels,
 }: {
-  onNew: () => void;
+  onNew: (provider?: Provider) => void;
   onHistory: () => void;
   onRefreshModels: () => void;
 }) {
@@ -362,8 +399,12 @@ function ChatActions({
         title="New Chat"
         icon={Icon.PlusCircle}
         shortcut={Keyboard.Shortcut.Common.New}
-        onAction={onNew}
+        onAction={() => onNew()}
       />
+      <ActionPanel.Submenu title="New Chat with Agent" icon={Icon.PlusCircle}>
+        <Action title="New Codex Chat" onAction={() => onNew("codex")} />
+        <Action title="New Pi Agent Chat" onAction={() => onNew("pi")} />
+      </ActionPanel.Submenu>
       <Action
         title="Chat History"
         icon={Icon.Clock}

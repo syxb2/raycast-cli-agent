@@ -11,8 +11,7 @@ export interface RunOptions extends RequestOptions {
   prompt: string;
   model?: string;
   systemPrompt?: string;
-  // Multi-turn chat. Claude: --session-id, then --resume. Codex: the thread id
-  // recorded for this session, then `codex exec resume`.
+  // Local conversation identity mapped to one Codex thread or Pi session file.
   sessionId?: string;
   signal?: AbortSignal;
   onText?: (fullText: string) => void;

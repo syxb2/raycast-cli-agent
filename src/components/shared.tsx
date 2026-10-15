@@ -10,14 +10,15 @@ import { ModelError } from "../lib/types";
 import { groupByProvider, ModelOption, sameModel } from "../lib/models";
 import { EFFORTS, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
-import { Provider, PROVIDER_NAMES } from "../lib/provider";
+import { resolvePiBinary } from "../lib/pi";
+import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
 
 function loginCommand(provider: Provider | undefined): string {
   if (provider === "codex") {
     // Codex may only exist inside the ChatGPT app, so use the resolved path.
-    return `'${resolveCodexBinary() ?? "codex"}' login`;
+    return `'${(resolveCodexBinary() ?? "codex").replace(/'/g, "'\\''")}' login`;
   }
-  return "claude /login";
+  return `'${(resolvePiBinary() ?? "pi").replace(/'/g, "'\\''")}'`;
 }
 
 function openLoginInTerminal(provider: Provider | undefined) {
@@ -128,18 +129,21 @@ export function OptionActions(props: {
   options: RequestOptions;
   onChange: (options: RequestOptions) => void;
   showTools?: boolean;
+  model: string;
 }) {
   const { options, onChange } = props;
   return (
     <ActionPanel.Section title="Options">
-      <Action
-        title={options.webSearch ? "Disable Web Search" : "Enable Web Search"}
-        icon={Icon.Globe}
-        shortcut={WEB_SEARCH_SHORTCUT}
-        onAction={() =>
-          onChange({ ...options, webSearch: !options.webSearch || undefined })
-        }
-      />
+      {providerOf(props.model) === "codex" ? (
+        <Action
+          title={options.webSearch ? "Disable Web Search" : "Enable Web Search"}
+          icon={Icon.Globe}
+          shortcut={WEB_SEARCH_SHORTCUT}
+          onAction={() =>
+            onChange({ ...options, webSearch: !options.webSearch || undefined })
+          }
+        />
+      ) : null}
       {props.showTools ? (
         <Action
           title={

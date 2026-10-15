@@ -49,11 +49,11 @@ export function errorMarkdown(error: ModelError): string {
     case "not-installed":
       return codex
         ? "## Codex CLI not found\n\nInstall it: `brew install codex` (or `npm i -g @openai/codex`). The ChatGPT app also ships one.\n\nIf it lives elsewhere, set **Codex CLI Path** in the extension preferences."
-        : "## Claude Code CLI not found\n\nInstall it: `curl -fsSL https://claude.ai/install.sh | bash`\n\nIf it lives elsewhere, set **Claude CLI Path** in the extension preferences.";
+        : "## Pi Agent CLI not found\n\nInstall Pi Agent and set **Pi CLI Path** in the extension preferences if needed.";
     case "not-logged-in":
       return codex
-        ? `## Not logged in to Codex\n\nRun \`codex login\` in a terminal and sign in with your ChatGPT account.\n\n\`\`\`\n${error.message}\n\`\`\``
-        : `## Not logged in to Claude\n\nRun \`claude\` in a terminal and sign in with \`/login\`.\n\n\`\`\`\n${error.message}\n\`\`\``;
+        ? `## Not logged in to Codex\n\nUse \`codex login\` or configure your provider credentials in the local Codex configuration.\n\n\`\`\`\n${error.message}\n\`\`\``
+        : `## Pi authentication failed\n\nRun \`pi\` in a terminal and use \`/login\`, or configure your local provider credentials.\n\n\`\`\`\n${error.message}\n\`\`\``;
     case "usage-limit":
       return `## Usage limit reached\n\n${error.message}`;
     case "cancelled":

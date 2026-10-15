@@ -1,4 +1,21 @@
-# CLI Assistant Changelog
+# Cli Agent Changelog
+
+## [Unreleased]
+
+- Bind each chat to one agent, remove cross-agent context replay and restrict chat model menus to that agent
+
+- Replace the Claude backend with Codex app-server JSON-RPC and Pi Agent RPC backends
+- Preserve local CLI authentication, custom model providers and exported environment variables
+- Add configuration directory overrides, native session bindings and verified Pi session recovery
+- Stream native text updates, interrupt individual Codex turns and serialize local session requests
+- Discover models from native protocols while keeping configured third-party Codex models available
+- Keep translation retries on the selected backend and update the Spotlight helper for Codex/Pi
+- Add isolated backend regression tests and release verification
+
+- Rename the extension ID to `raycast-cli-agent` and the display name and command subtitles to **Cli Agent**
+- Use the fork repository and renamed release package for installation and updates
+- Align Spotlight branding, support paths and environment variables with the new extension ID
+- Keep the original extension's settings and chat history separate
 
 ## [Show What the Model Does] - 2026-10-14
 
