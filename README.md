@@ -10,6 +10,16 @@ The repo is a fork of [CLI Assistant](https://github.com/umitaltintas/raycast-cl
 
 The extension ID is `raycast-cli-agent`. Raycast treats it as separate from the original extension; the original extension's settings and chat history are not imported automatically.
 
+## Release installation
+
+The fork must publish a `raycast-cli-agent.tar.gz` release asset before this command can install it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/install.sh | bash
+```
+
+The installer downloads this repository's latest prebuilt extension and registers it with Raycast. Run it again to update. Uninstall through Raycast's extension action menu. Tagging `v*` runs the backend checks, builds and publishes the release package through GitHub Actions.
+
 ## Development
 
 Requires macOS, Raycast v2, Node 22.22.2 or newer, and at least one locally configured CLI.
@@ -128,13 +138,3 @@ The extension keeps all chat management local:
 - Deleting a conversation removes its visible history and extension-owned binding. Native CLI session files are retained; deletion does not erase the CLI's independent history.
 
 Previous `codex/threads.json` mappings from this extension are imported when first resumed. A missing or mismatched native session is reported as an error instead of silently starting a replacement conversation.
-
-## Release installation
-
-The fork must publish a `raycast-cli-agent.tar.gz` release asset before this command can install it:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/install.sh | bash
-```
-
-The installer downloads this repository's latest prebuilt extension and registers it with Raycast. Run it again to update. Uninstall through Raycast's extension action menu. Tagging `v*` runs the backend checks, builds and publishes the release package through GitHub Actions.
