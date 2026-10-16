@@ -2,36 +2,31 @@
 
 ## [Unreleased]
 
-- Show fallback Chat questions and loading feedback immediately, and start from eligible cached models while discovery continues
+## [v0.1.1] - 2026-10-16
 
-- Show the first streamed text immediately and animate circular loading indicators in Chat and answers
+- Publish the first Cli Agent fork release with the `raycast-cli-agent` extension ID and a prebuilt `raycast-cli-agent.tar.gz` installation package
+- Keep the original CLI Assistant extension's settings and chat history separate
 
-- Remove the standalone Spotlight app, helper scripts and installer/release integration
+- Replace the Claude backend with native Codex app-server JSON-RPC and Pi Agent RPC backends
+- Reuse local CLI authentication, custom model providers and exported shell environment variables; support configuration directory and CLI path overrides
+- Bind each chat to one agent and its native session, verify Pi session recovery, serialize requests to the same session and interrupt individual Codex turns
+- Allow switching agents before sending a new chat's first message; keep model choices within the bound agent afterward
 
-- Add provider Model Browser pages with vendor filtering, ordered visible model selection and default actions
-- Filter Pi discovery using native auth checks, preserving shell environment and hiding models with no configured authentication
-- Make visible models a strict whitelist and invalidate cached Pi eligibility after authentication/configuration changes
-- Save valid setting edits automatically and show validation errors inline
-- Display concrete models with codex/pi prefixes and resolve native CLI defaults without selectable agent entries
-- Avoid Raycast auto-selecting Codex while the initial model catalog loads, and report provider discovery failures
-- Allow choosing any enabled agent's model in an unsent new chat, retaining fixed-agent bindings after sending
-- Replace flat native preferences with General, Codex and Pi Agent settings pages
-- Persist independent provider enablement, model menus, aliases, environment and request defaults
-- Add Codex response controls and Pi per-model thinking settings, with legacy preference initialization
+- Replace flat preferences with General, Codex and Pi Agent settings pages, including independent provider enablement, models, aliases, environment and request defaults
+- Save valid settings automatically and display validation errors inline; initialize settings from legacy preferences
+- Add Codex response controls and Pi per-model thinking settings
+- Add provider Model Browser pages with vendor filtering, ordered visible model selection and default actions; enforce visible models as a strict whitelist
+- Filter Pi models using native authentication checks and invalidate cached eligibility when credentials or configuration change
+- Display concrete models with `codex:` / `pi:` prefixes, resolve native CLI defaults and retain configured third-party Codex models
+- Prevent premature Codex selection while the model catalog loads and report provider discovery failures
 
-- Bind each chat to one agent, remove cross-agent context replay and restrict chat model menus to that agent
-
-- Replace the Claude backend with Codex app-server JSON-RPC and Pi Agent RPC backends
-- Preserve local CLI authentication, custom model providers and exported environment variables
-- Add configuration directory overrides, native session bindings and verified Pi session recovery
-- Stream native text updates, interrupt individual Codex turns and serialize local session requests
-- Discover models from native protocols while keeping configured third-party Codex models available
+- Show fallback Chat questions, loading feedback and the first streamed text immediately; start from eligible cached models while discovery continues
+- Add animated circular loading indicators in Chat and answers
 - Keep translation retries on the selected backend
-- Add isolated backend regression tests and release verification
 
-- Rename the extension ID to `raycast-cli-agent` and the display name and command subtitles to **Cli Agent**
-- Use the fork repository and renamed release package for installation and updates
-- Keep the original extension's settings and chat history separate
+- Replace the extension icon with a white `>_` mark on a solid `#DB3827` red background
+- Remove the standalone Spotlight app, helper scripts and installer/release integration
+- Add isolated backend regression tests and run backend, lint and formatting checks before release builds
 
 ## [Show What the Model Does] - 2026-10-14
 
