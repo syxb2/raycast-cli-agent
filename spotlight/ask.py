@@ -37,12 +37,16 @@ def current_model(settings=None):
         provider = settings.get("general", {}).get("defaultProvider", "codex")
         config = settings.get("providers", {}).get(provider, {})
         default = config.get("defaultModel", f"{provider}:default")
+        visible = config.get("visibleModels")
+        if visible == []:
+            raise ValueError("Choose a visible model in Cli Agent Settings → Model Browser.")
+        if visible is not None and default not in visible:
+            default = visible[0]
         try:
             with open(os.path.join(SUPPORT, "current-models.json")) as source:
                 saved = json.load(source).get(provider, {})
             model = saved.get("model", "")
-            visible = config.get("visibleModels")
-            if saved.get("defaultModel") == default and model.startswith(f"{provider}:") and (visible is None or model in visible or model == default):
+            if saved.get("defaultModel") == config.get("defaultModel", f"{provider}:default") and model.startswith(f"{provider}:") and (visible is None or model in visible):
                 return model
         except (OSError, ValueError):
             pass

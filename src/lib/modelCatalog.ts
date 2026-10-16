@@ -8,34 +8,48 @@ import {
   ModelCatalog,
   saveCatalog,
 } from "./models";
-import {
-  loadEnvironment,
-  providerEnvironment,
-  resolveBinary,
-  runtimeFingerprint,
-} from "./backend/environment";
-import { getProviderSettings } from "./settings";
+import { loadEnvironment, providerFingerprint } from "./backend/environment";
+import { getProviderSettings, updateProviderSettings } from "./settings";
 import { Provider, providerOf } from "./provider";
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let pending: Promise<ModelCatalog> | undefined;
 
 async function fingerprint(): Promise<string> {
-  const base = await loadEnvironment();
+  await loadEnvironment();
   return (["codex", "pi"] as const)
     .map((provider) => {
       if (!getProviderSettings(provider).enabled) return `${provider}:disabled`;
-      const env = providerEnvironment(provider, base);
-      const binary = resolveBinary(provider, env);
-      return binary
-        ? runtimeFingerprint(provider, binary, env)
-        : `${provider}:missing`;
+      return providerFingerprint(provider);
     })
     .join(":");
 }
 
+function initializeVisibility(
+  provider: Provider,
+  models: ModelCatalog["models"],
+): void {
+  const settings = getProviderSettings(provider);
+  if (settings.visibleModels !== null) return;
+  const own = models.filter((m) => providerOf(m.value) === provider);
+  const actual = own.filter((m) => !m.value.endsWith(":default"));
+  const nativeDefault = own.find((m) =>
+    m.value.endsWith(":default"),
+  )?.resolvedModel;
+  const selected =
+    actual.find(
+      (m) => m.value === settings.defaultModel || m.value === nativeDefault,
+    ) ?? actual[0];
+  if (selected)
+    updateProviderSettings(provider, { visibleModels: [selected.value] });
+}
+
 async function discover(force: boolean): Promise<ModelCatalog> {
   const key = await fingerprint();
+  const providerFingerprints = {
+    codex: providerFingerprint("codex"),
+    pi: providerFingerprint("pi"),
+  };
   const cached = loadCatalog();
   if (
     !force &&
@@ -50,12 +64,13 @@ async function discover(force: boolean): Promise<ModelCatalog> {
       : Promise.resolve([]),
     getProviderSettings("pi").enabled ? fetchPiModels() : Promise.resolve([]),
   ]);
-  const models = results.flatMap((result, i) =>
-    result.status === "fulfilled"
-      ? result.value
-      : (cached?.models.filter((m) => providerOf(m.value) === providers[i]) ??
-        []),
-  );
+  const models = results.flatMap((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    return cached?.providerFingerprints[providers[i]] ===
+      providerFingerprints[providers[i]]
+      ? cached.models.filter((m) => providerOf(m.value) === providers[i])
+      : [];
+  });
   const errors = Object.fromEntries(
     results.flatMap((result, i) =>
       result.status === "rejected"
@@ -79,13 +94,16 @@ async function discover(force: boolean): Promise<ModelCatalog> {
       "Provider configuration changed during discovery. Refresh models again.",
     );
   const catalog: ModelCatalog = {
-    version: 3,
+    version: 4,
     fingerprint: Object.keys(errors).length ? "" : key,
     fetchedAt: Date.now(),
     models,
     errors,
+    providerFingerprints,
   };
   saveCatalog(catalog);
+  for (const provider of providers)
+    if (!errors[provider]) initializeVisibility(provider, models);
   return catalog;
 }
 
@@ -103,7 +121,7 @@ export async function refreshProviderCatalog(
       "Provider configuration changed during discovery. Refresh models again.",
     );
   const catalog: ModelCatalog = {
-    version: 3,
+    version: 4,
     fingerprint: "",
     fetchedAt: Date.now(),
     models: [
@@ -112,9 +130,14 @@ export async function refreshProviderCatalog(
       ) ?? []),
       ...models,
     ],
+    providerFingerprints: {
+      ...loadCatalog()?.providerFingerprints,
+      [provider]: providerFingerprint(provider),
+    },
   };
   // A provider-only refresh does not mark another provider's catalog as fresh.
   saveCatalog(catalog);
+  initializeVisibility(provider, models);
   return catalog;
 }
 
@@ -132,7 +155,7 @@ export function refreshCatalog(force = false): Promise<ModelCatalog> {
 
 export function useModels() {
   const [models, setModels] = useState(availableModels);
-  const [isRefreshing, setRefreshing] = useState(false);
+  const [isRefreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
   const refresh = useCallback(async (force = false) => {
     setRefreshing(true);

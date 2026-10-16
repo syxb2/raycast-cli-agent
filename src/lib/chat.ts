@@ -7,11 +7,7 @@ export function chatModelChoices(
   conversation: Conversation,
   models: ModelOption[],
 ): ModelOption[] {
-  const boundModels = modelsForProvider(
-    models,
-    conversation.provider,
-    conversation.model,
-  );
+  const boundModels = modelsForProvider(models, conversation.provider);
   return conversation.messages.length
     ? boundModels
     : [

@@ -39,6 +39,15 @@ with tempfile.TemporaryDirectory() as root:
         assert helper.current_model(settings) == "pi:custom/chosen"
         settings["providers"]["pi"]["defaultModel"] = "pi:custom/new-default"
         assert helper.current_model(settings) == "pi:custom/new-default"
+        settings["providers"]["pi"]["visibleModels"] = ["pi:custom/visible"]
+        assert helper.current_model(settings) == "pi:custom/visible"
+        settings["providers"]["pi"]["visibleModels"] = []
+        try:
+            helper.current_model(settings)
+            raise AssertionError("An empty visible list must not fall back to a hidden default")
+        except ValueError:
+            pass
+        settings["providers"]["pi"]["visibleModels"] = None
     assert helper.environment_overrides("LITERAL=$(never-run)\nTOKEN='a=b'") == {"LITERAL": "$(never-run)", "TOKEN": "a=b"}
     with patch.dict(os.environ, {"SHELL": "/bin/sh"}):
         env = helper.local_env("pi", settings["providers"]["pi"])

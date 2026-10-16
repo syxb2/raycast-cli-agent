@@ -8,6 +8,19 @@ import { Provider } from "../provider";
 import { getProviderSettings, parseEnvironmentVariables } from "../settings";
 
 let shellEnvironment: Promise<NodeJS.ProcessEnv> | undefined;
+let resolvedEnvironment: NodeJS.ProcessEnv | undefined;
+
+export function cachedEnvironment(): NodeJS.ProcessEnv {
+  return resolvedEnvironment ?? process.env;
+}
+
+export function providerFingerprint(provider: Provider): string {
+  const env = providerEnvironment(provider, cachedEnvironment());
+  const binary = resolveBinary(provider, env);
+  return binary
+    ? runtimeFingerprint(provider, binary, env)
+    : `${provider}:missing`;
+}
 
 // GUI processes miss shell-exported provider keys, proxy variables and PATH.
 // Values stay in memory and are never logged or copied into extension storage.
@@ -54,6 +67,7 @@ export function loadEnvironment(): Promise<NodeJS.ProcessEnv> {
           ].filter(Boolean),
         ),
       ].join(delimiter);
+      resolvedEnvironment = env;
       resolveEnv(env);
     };
     child.once("error", finish);

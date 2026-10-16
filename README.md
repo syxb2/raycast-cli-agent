@@ -57,9 +57,15 @@ The **Settings** command has three pages:
 | --- | --- |
 | General | Default agent, primary and secondary languages, shared extra instructions |
 | Codex | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, reasoning effort, response style, verbosity, reasoning summary, web search, tools and environment overrides |
-| Pi Agent | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, thinking level, thinking per model, tools and environment overrides |
+| Pi Agent | Enablement, CLI path, configuration directory, model browser, default/visible models, aliases, thinking level, thinking per model, tools and environment overrides |
 
-Use **Save and Discover Models** in a provider page to save the edited paths/environment and query only that provider. Model visibility and aliases affect that provider's menus. The configured default model remains visible. A model default change resets the remembered selection for that provider; other providers' choices are preserved.
+Open **Model Browser** from the provider's action menu (⌘B). It supports search, filtering by model provider, selecting visible models, reordering, setting the default, and refreshing discovery. **Save and Discover Models** also saves edited paths/environment and queries only that agent.
+
+For Pi, model discovery is checked with the same CLI and environment using `pi auth check --provider <provider> --json --no-refresh`. Only vendors Pi reports as `ready` appear in the browser. This supports Pi's own API key, OAuth, custom-provider and environment authentication rules without inspecting or copying credentials. A CLI supporting this command is required; unsupported or failed authentication checks produce an error instead of exposing unchecked models. Checks identify configured authentication; they do not send billable prompts or test individual models remotely.
+
+Pi continues inheriting the interactive login shell's complete exported environment. A provider authenticated there can appear even when absent from Pi's `auth.json`. Use **Visible Models** to keep only the desired models in Chat. The visible list is an ordered whitelist intersected with the discovered catalog; defaults, remembered models and hand-entered Pi IDs cannot bypass it. A changed default resets the remembered selection for that agent. Removing a default selects another visible model. Clearing the list hides all of that agent's models and refreshing does not repopulate it.
+
+On first authenticated discovery, legacy **Show all models** settings initialize to the native current model (or the first discovered model). Existing explicit visible selections are retained. Subsequent model discovery never automatically adds new models to the visible list. Changes to Pi's credential/configuration files or provider environment invalidate its cached eligibility, so stale authenticated models cannot reappear after a configuration change.
 
 Valid setting changes are saved automatically, including when returning from a form. Incomplete or invalid input displays **Not Saved** and leaves the previous valid settings on disk. **Save Settings** also validates and saves explicitly. The default agent applies to the Chat command and **New Chat**; **New Chat with Agent** overrides it for that new conversation.
 

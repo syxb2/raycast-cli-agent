@@ -10,6 +10,7 @@ import {
   chmodSync,
   rmSync,
   statSync,
+  existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -363,15 +364,26 @@ test("chat model menus contain only models from the bound agent", () => {
     { value: "pi:custom/test-model", title: "pi: custom/test-model" },
   ];
   assert.deepEqual(
-    backend
-      .modelsForProvider(models, "codex", "codex:older-model")
-      .map((m) => m.value),
-    ["codex:test-model", "codex:older-model"],
+    backend.modelsForProvider(models, "codex").map((m) => m.value),
+    ["codex:test-model"],
   );
   assert.deepEqual(
     backend.modelsForProvider(models, "pi").map((m) => m.value),
     ["pi:custom/test-model"],
   );
+});
+
+test("chat dropdown registers the selected model first during native initialization", () => {
+  const models = [
+    { value: "codex:test", title: "codex: test" },
+    { value: "pi:deepseek/first", title: "pi: deepseek/first" },
+    { value: "pi:deepseek/selected", title: "pi: deepseek/selected" },
+  ];
+  const groups = backend.groupByProvider(models, "pi:deepseek/selected");
+  assert.equal(groups[0].provider, "pi");
+  assert.equal(groups[0].models[0].value, "pi:deepseek/selected");
+  assert.equal(groups[1].provider, "codex");
+  assert.equal(models[0].value, "codex:test");
 });
 
 test("new chats offer Pi models and keep the selected agent after sending", async () => {
@@ -625,18 +637,20 @@ test("provider settings isolate defaults and environment overrides", async () =>
   }
 });
 
-test("provider model visibility, aliases and remembered choices are independent", () => {
+test("provider model visibility, aliases and remembered choices are independent", async () => {
   const codex = backend.getProviderSettings("codex");
   const pi = backend.getProviderSettings("pi");
   try {
+    await backend.refreshCatalog(true);
     backend.updateProviderSettings("codex", {
       customModels: ["codex:visible", "codex:hidden"],
       visibleModels: ["codex:visible"],
       modelAliases: { "codex:visible": "My Codex Model" },
     });
     backend.updateProviderSettings("pi", {
-      customModels: ["pi:custom/visible"],
-      modelAliases: { "pi:custom/visible": "My Pi Model" },
+      customModels: ["pi:custom/undiscovered"],
+      visibleModels: ["pi:custom/org/model/with-slash"],
+      modelAliases: { "pi:custom/org/model/with-slash": "My Pi Model" },
     });
     const models = backend.availableModels();
     assert.ok(
@@ -648,18 +662,20 @@ test("provider model visibility, aliases and remembered choices are independent"
     assert.ok(!models.some((m) => m.value === "codex:hidden"));
     assert.ok(
       models.some(
-        (m) => m.value === "pi:custom/visible" && m.title === "pi: My Pi Model",
+        (m) =>
+          m.value === "pi:custom/org/model/with-slash" &&
+          m.title === "pi: My Pi Model",
       ),
     );
     backend.setCurrentModel("codex:visible");
-    backend.setCurrentModel("pi:custom/visible");
+    backend.setCurrentModel("pi:custom/org/model/with-slash");
     assert.equal(backend.currentModel("codex"), "codex:visible");
-    assert.equal(backend.currentModel("pi"), "pi:custom/visible");
+    assert.equal(backend.currentModel("pi"), "pi:custom/org/model/with-slash");
     backend.updateProviderSettings("codex", {
       defaultModel: "codex:new-default",
     });
-    assert.equal(backend.currentModel("codex"), "codex:new-default");
-    assert.equal(backend.currentModel("pi"), "pi:custom/visible");
+    assert.equal(backend.currentModel("codex"), "codex:visible");
+    assert.equal(backend.currentModel("pi"), "pi:custom/org/model/with-slash");
     assert.throws(
       () =>
         backend.updateProviderSettings("codex", { defaultModel: "pi:default" }),
@@ -674,17 +690,18 @@ test("provider model visibility, aliases and remembered choices are independent"
 test("native default models resolve to concrete prefixed menu entries", async () => {
   const general = backend.getSettings().general;
   const previous = backend.loadCatalog();
+  const codex = backend.getProviderSettings("codex");
+  const pi = backend.getProviderSettings("pi");
   try {
-    const models = [
-      ...(await backend.fetchCodexModels()),
-      ...(await backend.fetchPiModels()),
-    ];
-    backend.saveCatalog({
-      version: 3,
-      fingerprint: "fixture",
-      fetchedAt: Date.now(),
-      models,
+    backend.updateProviderSettings("codex", {
+      visibleModels: null,
+      defaultModel: "codex:default",
     });
+    backend.updateProviderSettings("pi", {
+      visibleModels: null,
+      defaultModel: "pi:default",
+    });
+    await backend.refreshCatalog(true);
     const menu = backend.availableModels();
     assert.ok(menu.some((m) => m.value === "codex:changed-model"));
     assert.ok(menu.some((m) => m.value === "pi:custom/pi-local-model"));
@@ -718,12 +735,14 @@ test("native default models resolve to concrete prefixed menu entries", async ()
         .some((m) => m.value === "codex:changed-model"),
     );
   } finally {
+    backend.updateProviderSettings("codex", codex);
+    backend.updateProviderSettings("pi", pi);
     backend.updateGeneralSettings(general);
     if (previous) backend.saveCatalog(previous);
   }
 });
 
-test("a failed Pi discovery is reported and retried without hiding cached models", async () => {
+test("a changed Pi runtime cannot reuse old authenticated models after discovery fails", async () => {
   const settings = backend.getProviderSettings("pi");
   const previous = backend.loadCatalog();
   try {
@@ -734,7 +753,7 @@ test("a failed Pi discovery is reported and retried without hiding cached models
     assert.match(failed.errors.pi, /CLI not found/);
     assert.equal(failed.fingerprint, "");
     assert.ok(
-      backend
+      !backend
         .availableModels()
         .some((m) => m.value === "pi:custom/pi-local-model"),
     );
@@ -745,6 +764,115 @@ test("a failed Pi discovery is reported and retried without hiding cached models
   } finally {
     backend.updateProviderSettings("pi", settings);
     if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("Pi model browser trusts native auth and visible models cannot bypass it", async () => {
+  const settings = backend.getProviderSettings("pi");
+  const previous = backend.loadCatalog();
+  const fixture = readFileSync(join(piDir, "fixture.json"), "utf8");
+  const authFile = join(piDir, "auth.json");
+  const priorAuth = existsSync(authFile) ? readFileSync(authFile) : undefined;
+  try {
+    writeFileSync(
+      join(piDir, "fixture.json"),
+      JSON.stringify({
+        authReady: ["deepseek"],
+        activeModel: { provider: "openrouter", id: "blocked" },
+        models: [
+          { provider: "deepseek", id: "chat" },
+          { provider: "deepseek", id: "reasoner" },
+          { provider: "openrouter", id: "blocked" },
+        ],
+      }),
+    );
+    backend.updateProviderSettings("pi", { visibleModels: null });
+    const start = events().length;
+    await backend.refreshProviderCatalog("pi");
+    assert.deepEqual(
+      backend.browserModels("pi").map((m) => m.value),
+      ["pi:deepseek/chat", "pi:deepseek/reasoner"],
+    );
+    const probes = events()
+      .slice(start)
+      .filter((e) => e.event === "launch" && e.args[0] === "auth");
+    assert.equal(probes.length, 2, "Check each vendor once, not each model");
+    assert.ok(
+      probes.every(
+        (e) =>
+          e.args.includes("--no-refresh") &&
+          !e.args.includes("--credentials") &&
+          e.configDir === piDir &&
+          e.keyPreserved,
+      ),
+    );
+    assert.deepEqual(backend.getProviderSettings("pi").visibleModels, [
+      "pi:deepseek/chat",
+    ]);
+    backend.updateProviderSettings("pi", {
+      visibleModels: ["pi:deepseek/reasoner", "pi:openrouter/blocked"],
+      customModels: ["pi:openrouter/blocked"],
+      defaultModel: "pi:openrouter/blocked",
+    });
+    backend.setCurrentModel("pi:openrouter/blocked");
+    assert.equal(backend.currentModel("pi"), "pi:deepseek/reasoner");
+    const available = backend
+      .availableModels()
+      .filter((m) => m.value.startsWith("pi:"));
+    assert.deepEqual(
+      available.map((m) => m.value),
+      ["pi:deepseek/reasoner"],
+    );
+    assert.deepEqual(
+      backend.chatModelChoices(
+        {
+          ...backend.newConversation("pi:openrouter/blocked"),
+          messages: [{ question: "existing" }],
+        },
+        available,
+      ),
+      available,
+    );
+    backend.setVisibleModels("pi", []);
+    await backend.refreshProviderCatalog("pi");
+    assert.deepEqual(backend.getProviderSettings("pi").visibleModels, []);
+    assert.equal(
+      backend.availableModels().filter((m) => m.value.startsWith("pi:")).length,
+      0,
+    );
+    backend.setVisibleModels("pi", ["pi:deepseek/chat"]);
+    writeFileSync(authFile, "{}");
+    assert.deepEqual(
+      backend.browserModels("pi"),
+      [],
+      "Auth file changes invalidate cached eligibility immediately",
+    );
+    const cfg = JSON.parse(readFileSync(join(piDir, "fixture.json"), "utf8"));
+    cfg.authReady = [];
+    writeFileSync(join(piDir, "fixture.json"), JSON.stringify(cfg));
+    await backend.refreshProviderCatalog("pi");
+    assert.deepEqual(backend.browserModels("pi"), []);
+    assert.equal(
+      backend.availableModels().filter((m) => m.value.startsWith("pi:")).length,
+      0,
+    );
+  } finally {
+    writeFileSync(join(piDir, "fixture.json"), fixture);
+    if (priorAuth) writeFileSync(authFile, priorAuth);
+    else rmSync(authFile, { force: true });
+    backend.updateProviderSettings("pi", settings);
+    if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("Pi discovery does not expose unverified models when native auth checks are unsupported", async () => {
+  const file = join(piDir, "fixture.json");
+  const previous = readFileSync(file, "utf8");
+  try {
+    writeFileSync(file, JSON.stringify({ authUnsupported: true }));
+    await assert.rejects(backend.fetchPiModels(), /auth check/);
+  } finally {
+    writeFileSync(file, previous);
   }
 });
 

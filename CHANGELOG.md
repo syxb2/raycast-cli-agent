@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add provider Model Browser pages with vendor filtering, ordered visible model selection and default actions
+- Filter Pi discovery using native auth checks, preserving shell environment and hiding models with no configured authentication
+- Make visible models a strict whitelist and invalidate cached Pi eligibility after authentication/configuration changes
 - Save valid setting edits automatically and show validation errors inline
 - Display concrete models with codex/pi prefixes and resolve native CLI defaults without selectable agent entries
 - Avoid Raycast auto-selecting Codex while the initial model catalog loads, and report provider discovery failures

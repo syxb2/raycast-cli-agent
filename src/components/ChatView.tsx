@@ -13,6 +13,7 @@ import { errorMarkdown, footerMarkdown } from "../lib/format";
 import { stepsMarkdown } from "../lib/steps";
 import {
   currentModel,
+  availableModels,
   groupByProvider,
   matchingValue,
   modelLabel,
@@ -67,6 +68,24 @@ export function ChatView({
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
 
+  useEffect(() => {
+    if (
+      conversation.messages.length ||
+      catalog.isRefreshing ||
+      !getProviderSettings(conversation.provider).enabled ||
+      matchingValue(conversation.model, models)
+    )
+      return;
+    const fallback = currentModel(conversation.provider);
+    if (matchingValue(fallback, models))
+      setConversation((previous) => ({ ...previous, model: fallback }));
+  }, [
+    catalog.models,
+    catalog.isRefreshing,
+    conversation.model,
+    conversation.messages.length,
+  ]);
+
   // `prompt` replaces the question for the model (approved command results);
   // `from` is the conversation to continue when state isn't updated yet.
   const send = async (
@@ -76,6 +95,15 @@ export function ChatView({
   ) => {
     const q = question.trim();
     if (!q || stream.isLoading) return;
+    if (!matchingValue(from.model, availableModels())) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Select a visible model",
+        message:
+          "Open Settings → Model Browser to choose an authenticated model.",
+      });
+      return;
+    }
     const msg: Message = {
       id: crypto.randomUUID(),
       question: q,
@@ -123,13 +151,17 @@ export function ChatView({
 
   useEffect(() => {
     // Deferred for the same StrictMode reason as in AnswerView.
-    if (!firstQuestion || sentFirst.current) return;
+    if (!firstQuestion || sentFirst.current || catalog.isRefreshing) return;
+    if (!matchingValue(conversation.model, models)) {
+      setInput(firstQuestion);
+      return;
+    }
     const timer = setTimeout(() => {
       sentFirst.current = true;
       send(firstQuestion);
     }, 0);
     return () => clearTimeout(timer);
-  }, [firstQuestion]);
+  }, [firstQuestion, catalog.isRefreshing, catalog.models, conversation.model]);
 
   useEffect(() => {
     const last = conversation.messages.at(-1);
@@ -165,6 +197,7 @@ export function ChatView({
 
   const changeModel = (model: string) => {
     if (
+      !models.some((m) => m.value === model) ||
       !getProviderSettings(providerOf(model)).enabled ||
       (conversation.messages.length > 0 &&
         providerOf(model) !== conversation.provider)
@@ -242,7 +275,7 @@ export function ChatView({
       selectedItemId={selectedId}
       onSelectionChange={(id) => id && setSelectedId(id)}
       searchBarAccessory={
-        models.length && matchingValue(conversation.model, models) ? (
+        models.length && !catalog.isRefreshing ? (
           <List.Dropdown
             key={conversation.provider}
             tooltip={
@@ -255,9 +288,16 @@ export function ChatView({
               catalog.isRefreshing ? "Loading Models…" : "Select Model"
             }
             value={matchingValue(conversation.model, models)}
+            defaultValue={matchingValue(conversation.model, models)}
             onChange={changeModel}
           >
-            {groupByProvider(models).map((g) => (
+            {!matchingValue(conversation.model, models) ? (
+              <List.Dropdown.Item value="" title="Select Model" />
+            ) : null}
+            {groupByProvider(
+              models,
+              matchingValue(conversation.model, models),
+            ).map((g) => (
               <List.Dropdown.Section
                 key={g.provider}
                 title={PROVIDER_NAMES[g.provider]}

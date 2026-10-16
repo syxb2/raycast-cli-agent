@@ -201,11 +201,7 @@ export function AnswerView(props: AnswerViewProps) {
               <ModelSubmenu
                 title="Ask Another Model"
                 current={model}
-                models={modelsForProvider(
-                  catalog.models,
-                  providerOf(model),
-                  model,
-                )}
+                models={modelsForProvider(catalog.models, providerOf(model))}
                 onSelect={regenerate}
                 onRefresh={() => catalog.refresh(true)}
               />

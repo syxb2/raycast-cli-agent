@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
 import { getProviderSettings } from "./settings";
 import { PI_DEFAULT, PI_PREFIX, piModelId } from "./provider";
 import { RunOptions, RunResult } from "./types";
@@ -26,6 +27,8 @@ async function launchPi(opts?: RunOptions): Promise<{
   rpc: JsonLineProcess;
   native?: NativeSession;
   configDir: string;
+  binary: string;
+  env: NodeJS.ProcessEnv;
 }> {
   const env = providerEnvironment("pi", await loadEnvironment());
   const binary = resolveBinary("pi", env);
@@ -76,7 +79,7 @@ async function launchPi(opts?: RunOptions): Promise<{
         cancelled: true,
       });
   });
-  return { rpc, native, configDir };
+  return { rpc, native, configDir, binary, env };
 }
 
 export function verifyPiSession(
@@ -261,6 +264,39 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
   return result;
 }
 
+function checkPiAuth(
+  binary: string,
+  env: NodeJS.ProcessEnv,
+  provider: string,
+): Promise<boolean> {
+  return new Promise((resolveAuth, reject) => {
+    execFile(
+      binary,
+      ["auth", "check", "--provider", provider, "--json", "--no-refresh"],
+      {
+        env,
+        timeout: 10_000,
+        maxBuffer: 64 * 1024,
+      },
+      (error, stdout) => {
+        try {
+          const result = JSON.parse(stdout);
+          if (result.provider !== provider) throw new Error();
+          if (result.status === "ready" && !error) return resolveAuth(true);
+          if (result.status === "not_ready") return resolveAuth(false);
+        } catch {
+          /* Do not expose CLI output, which can contain credentials. */
+        }
+        reject(
+          new Error(
+            `Pi could not check authentication for ${provider}${error?.killed ? " (timed out)" : ""}. A CLI supporting 'pi auth check --json --no-refresh' is required.`,
+          ),
+        );
+      },
+    );
+  });
+}
+
 export async function fetchPiModels(): Promise<
   {
     value: string;
@@ -269,7 +305,7 @@ export async function fetchPiModels(): Promise<
     resolvedModel?: string;
   }[]
 > {
-  const { rpc } = await launchPi();
+  const { rpc, binary, env } = await launchPi();
   try {
     const state = await rpc.request("get_state", {}, 20_000);
     const response = await rpc.request("get_available_models", {}, 20_000);
@@ -277,18 +313,44 @@ export async function fetchPiModels(): Promise<
       state.model?.provider && state.model?.id
         ? `${PI_PREFIX}${state.model.provider}/${state.model.id}`
         : undefined;
-    const models = [
-      { value: PI_DEFAULT, title: "Pi Agent", resolvedModel: activeModel },
-      ...(Array.isArray(response) ? response : (response.models ?? []))
-        .filter((m: RecordValue) => m.provider && m.id)
-        .map((m: RecordValue) => ({
-          value: `${PI_PREFIX}${m.provider}/${m.id}`,
-          title: `${m.name || m.id} (${m.provider})`,
-          description: m.reasoning ? "Supports reasoning" : undefined,
-        })),
-    ];
-    if (activeModel && !models.some((m) => m.value === activeModel))
-      models.push({ value: activeModel, title: state.model.id });
+    const candidates: RecordValue[] = (
+      Array.isArray(response) ? response : (response.models ?? [])
+    ).filter(
+      (m: RecordValue) =>
+        typeof m.provider === "string" && typeof m.id === "string",
+    );
+    // Pi's auth command is authoritative in the same launch environment.
+    // Never infer authentication from model metadata or inspect credential values.
+    const providers = [...new Set(candidates.map((m) => m.provider as string))];
+    const ready = new Set<string>();
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(3, providers.length) }, async () => {
+        while (next < providers.length) {
+          const provider = providers[next++];
+          if (await checkPiAuth(binary, env, provider)) ready.add(provider);
+        }
+      }),
+    );
+    const models: {
+      value: string;
+      title: string;
+      description?: string;
+      resolvedModel?: string;
+    }[] = candidates
+      .filter((m) => ready.has(m.provider))
+      .map((m: RecordValue) => ({
+        value: `${PI_PREFIX}${m.provider}/${m.id}`,
+        title: `${m.name || m.id} (${m.provider})`,
+        description: m.reasoning ? "Supports reasoning" : undefined,
+      }));
+    // An old current model must not bypass auth or the discovered catalog.
+    if (activeModel && models.some((m) => m.value === activeModel))
+      models.unshift({
+        value: PI_DEFAULT,
+        title: "Pi Agent",
+        resolvedModel: activeModel,
+      });
     return models;
   } finally {
     rpc.shutdown();

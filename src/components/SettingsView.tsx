@@ -14,7 +14,14 @@ import { useState } from "react";
 import { expandPath } from "../lib/backend/environment";
 import { LANGUAGES } from "../lib/languages";
 import { refreshProviderCatalog } from "../lib/modelCatalog";
-import { loadCatalog, modelLabel, ModelOption } from "../lib/models";
+import {
+  browserModels,
+  modelLabel,
+  ModelOption,
+  resolvedModel,
+  sameModel,
+} from "../lib/models";
+import { ModelBrowser } from "./ModelBrowser";
 import {
   CODEX_DEFAULT,
   PI_DEFAULT,
@@ -84,6 +91,11 @@ export function SettingsView() {
                 <Action.Push
                   title={`Open ${PROVIDER_NAMES[provider]} Settings`}
                   target={<ProviderSettingsForm provider={provider} />}
+                  onPop={reload}
+                />
+                <Action.Push
+                  title="Open Model Browser"
+                  target={<ModelBrowser provider={provider} />}
                   onPop={reload}
                 />
               </ActionPanel>
@@ -248,7 +260,7 @@ function initialDraft(provider: Provider): ProviderDraft {
 function ProviderSettingsForm({ provider }: { provider: Provider }) {
   const { pop } = useNavigation();
   const [draft, setDraft] = useState(() => initialDraft(provider));
-  const [models, setModels] = useState(() => loadCatalog()?.models ?? []);
+  const [models, setModels] = useState(() => browserModels(provider));
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
   const set = <K extends keyof ProviderDraft>(
@@ -256,6 +268,22 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
     value: ProviderDraft[K],
   ) => {
     const next = { ...draft, [key]: value };
+    if (
+      key === "visibleModels" &&
+      next.visibleModels !== null &&
+      !next.visibleModels.some((id) => sameModel(id, next.defaultModel))
+    )
+      next.defaultModel =
+        next.visibleModels[0] ??
+        (provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT);
+    if (key === "defaultModel") {
+      const actual = resolvedModel(next.defaultModel);
+      if (browserModels(provider).some((m) => m.value === actual))
+        next.visibleModels = [
+          actual,
+          ...(next.visibleModels ?? []).filter((id) => id !== actual),
+        ];
+    }
     setDraft(next);
     try {
       persist(next);
@@ -271,9 +299,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
   );
   for (const raw of [
     nativeDefault,
-    draft.defaultModel,
-    ...(draft.visibleModels ?? []),
-    ...draft.customModelsText.split(/[\n,]/),
+    ...(provider === "codex" ? draft.customModelsText.split(/[\n,]/) : []),
   ]) {
     try {
       const value = normalizeProviderModel(provider, raw);
@@ -352,7 +378,8 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         throw new Error("Enable this provider before discovering its models.");
       persist();
       const catalog = await refreshProviderCatalog(provider);
-      setModels(catalog.models);
+      setModels(browserModels(provider));
+      setDraft(initialDraft(provider));
       await showToast({
         style: Toast.Style.Success,
         title: "Models refreshed",
@@ -381,6 +408,18 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
             title="Save and Discover Models"
             icon={Icon.ArrowClockwise}
             onAction={discover}
+          />
+          <Action.Push
+            title="Model Browser"
+            icon={Icon.MagnifyingGlass}
+            shortcut={{ modifiers: ["cmd"], key: "b" }}
+            target={<ModelBrowser provider={provider} />}
+            onPop={() =>
+              queueMicrotask(() => {
+                setDraft(initialDraft(provider));
+                setModels(browserModels(provider));
+              })
+            }
           />
         </ActionPanel>
       }
@@ -418,8 +457,8 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       />
       <Form.Separator />
       <Form.Description
-        title="Models"
-        text="Discover models with the action menu. Choose visible models and optional display aliases for this provider. The default model stays visible."
+        title="Model Browser"
+        text="Open Model Browser (⌘B) to discover models and choose which appear in chats. Pi authentication is checked by Pi itself. Valid selections save automatically."
       />
       <Form.Dropdown
         id="defaultModel"
@@ -439,36 +478,32 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           />
         ))}
       </Form.Dropdown>
-      <Form.TextArea
-        id="customModels"
-        title="Extra Models"
-        placeholder={
-          provider === "codex"
-            ? "my-model\ncodex:another-model"
-            : "openai/my-model\npi:anthropic/another-model"
-        }
-        value={draft.customModelsText}
-        onChange={(value) => set("customModelsText", value)}
+      {provider === "codex" ? (
+        <Form.TextArea
+          id="customModels"
+          title="Extra Models"
+          placeholder={
+            provider === "codex"
+              ? "my-model\ncodex:another-model"
+              : "openai/my-model\npi:anthropic/another-model"
+          }
+          value={draft.customModelsText}
+          onChange={(value) => set("customModelsText", value)}
+        />
+      ) : null}
+      <Form.Description
+        title="Visible Models"
+        text="Only these discovered models appear in chats. Clearing this list hides all models for this agent. Model discovery does not add new models to an existing selection."
       />
-      <Form.Checkbox
-        id="allModels"
-        label="Show all models"
-        value={draft.visibleModels === null}
-        onChange={(value) =>
-          set(
-            "visibleModels",
-            value ? null : choices.map((model) => model.value),
-          )
-        }
-      />
-      {draft.visibleModels !== null ? (
-        <Form.TagPicker
-          id="visibleModels"
-          title="Visible Models"
-          value={draft.visibleModels}
-          onChange={(value) => set("visibleModels", value)}
-        >
-          {choices.map((model) => (
+      <Form.TagPicker
+        id="visibleModels"
+        title="Visible Models"
+        value={draft.visibleModels ?? []}
+        onChange={(value) => set("visibleModels", value)}
+      >
+        {choices
+          .filter((model) => model.value !== nativeDefault)
+          .map((model) => (
             <Form.TagPicker.Item
               key={model.value}
               title={
@@ -479,8 +514,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
               value={model.value}
             />
           ))}
-        </Form.TagPicker>
-      ) : null}
+      </Form.TagPicker>
       <Form.TextArea
         id="modelAliases"
         title="Model Aliases"

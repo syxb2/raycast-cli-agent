@@ -30,6 +30,23 @@ log({
   keyPreserved: process.env.OPENAI_API_KEY === "fixture-key",
   proxyPreserved: process.env.HTTPS_PROXY === "http://fixture-proxy",
 });
+if (provider === "pi" && args[0] === "auth") {
+  const cfg = flags();
+  const name = args[args.indexOf("--provider") + 1];
+  if (cfg.authUnsupported) {
+    process.stdout.write("unsupported auth command\n");
+    process.exit(1);
+  }
+  const ready = (cfg.authReady ?? ["custom"]).includes(name);
+  send({
+    provider: name,
+    status: ready ? "ready" : "not_ready",
+    ...(ready
+      ? { authType: "api_key" }
+      : { reason: "credentials_not_configured" }),
+  });
+  process.exit(ready ? 0 : 1);
+}
 let sessionId;
 let sessionFile;
 if (provider === "pi") {
@@ -176,12 +193,18 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       reply({
         sessionId: cfg.mismatch ? "wrong-id" : sessionId,
         sessionFile,
-        model: { id: "pi-local-model", provider: "custom" },
+        model: cfg.activeModel ?? { id: "pi-local-model", provider: "custom" },
       });
     if (method === "get_available_models")
       reply({
-        models: [
+        models: cfg.models ?? [
+          { id: "pi-local-model", provider: "custom", name: "Pi Local" },
           { id: "org/model/with-slash", provider: "custom", name: "Pi Custom" },
+          {
+            id: "unconfigured-model",
+            provider: "unconfigured",
+            name: "Not Configured",
+          },
         ],
       });
     if (method === "prompt") {
