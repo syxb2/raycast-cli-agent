@@ -3,7 +3,7 @@
   "name": "raycast-cli-agent",
   "title": "Cli Agent",
   "description": "Ask, chat, translate and rewrite selected text using your locally configured Codex or Pi Agent CLI.",
-  "icon": "extension-icon.png",
+  "icon": "extension-icon-red.png",
   "author": "Carol White",
   "categories": [
     "Productivity",

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/extension-icon.png" width="128" alt="Cli Agent"></p>
+<p align="center"><img src="assets/extension-icon-red.png" width="128" alt="Cli Agent"></p>
 
 # Cli Agent
 
