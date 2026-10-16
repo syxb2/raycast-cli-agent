@@ -6,7 +6,7 @@ Author and maintainer: **Carol White**.
 
 A Raycast extension for asking questions, chatting, translating and rewriting text through your locally configured **Codex CLI** or **Pi Agent CLI**.
 
-Based on [CLI Assistant](https://github.com/umitaltintas/raycast-cli-assistant), originally created by umitaltintas. The backend follows the native-process, RPC and session-binding approach used in the local `reference/claudian` project; it does not depend on that checkout at runtime.
+The repo is a fork of [CLI Assistant](https://github.com/umitaltintas/raycast-cli-assistant), originally created by umitaltintas.
 
 The extension ID is `raycast-cli-agent`. Raycast treats it as separate from the original extension; the original extension's settings and chat history are not imported automatically.
 
