@@ -2,3 +2,4 @@
 - [x] 删掉 spotlight 相关组件
 - [ ] 允许设置默认工作目录
 - [x] 按照新项目改 README
+- [x] github release

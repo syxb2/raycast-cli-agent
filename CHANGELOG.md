@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Require changelog maintenance for each change and Codex attribution in agent-assisted commits
+- Ignore local `docs` directories and mark the GitHub release task as complete
+
 ## [v0.1.1] - 2026-10-16
 
 - Publish the first Cli Agent fork release with the `raycast-cli-agent` extension ID and a prebuilt `raycast-cli-agent.tar.gz` installation package
