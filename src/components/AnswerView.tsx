@@ -123,7 +123,6 @@ export function AnswerView(props: AnswerViewProps) {
   return (
     <Detail
       navigationTitle={props.navigationTitle ?? "Cli Agent"}
-      isLoading={stream.isLoading}
       markdown={markdown}
       metadata={
         !stream.isLoading ? (

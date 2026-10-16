@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Remove the animated top loading bar while Chat and answer views are thinking or generating; keep inline status indicators and Stop actions
 - Require changelog maintenance for each change and Codex attribution in agent-assisted commits
 - Ignore local `docs` directories and mark the GitHub release task as complete
 

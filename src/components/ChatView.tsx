@@ -318,7 +318,6 @@ export function ChatView({
         conversation.title || queuedQuestion?.question || "New Chat",
         ...optionBadges(conversation.options),
       ].join(" · ")}
-      isLoading={isLoading}
       isShowingDetail={messages.length > 0}
       searchBarPlaceholder={
         messages.length
