@@ -138,11 +138,3 @@ curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/instal
 ```
 
 The installer downloads this repository's latest prebuilt extension and registers it with Raycast. Run it again to update. Uninstall through Raycast's extension action menu. Tagging `v*` runs the backend checks, builds and publishes the release package through GitHub Actions.
-
-Add `--spotlight` to create `~/Applications/Cli Agent.app`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/syxb2/raycast-cli-agent/main/install.sh | bash -s -- --spotlight
-```
-
-Spotlight provides a separate, one-shot dialog using the configured default agent and its remembered model. It reads the same provider settings, including enablement, CLI path, configuration directory and environment overrides. It uses `codex exec` or Pi print mode, preserves API keys and does not maintain chat history.

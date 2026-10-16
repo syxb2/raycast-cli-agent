@@ -10,14 +10,6 @@ set -euo pipefail
 
 REPO="syxb2/raycast-cli-agent"
 NAME="raycast-cli-agent" # "name" in package.json; the Raycast extension id
-# Pass --spotlight (curl ... | bash -s -- --spotlight) to also create a
-# "Cli Agent" app that Spotlight finds; once created, updates keep it current.
-SPOTLIGHT=0
-for arg in "$@"; do
-  [ "$arg" = "--spotlight" ] && SPOTLIGHT=1
-done
-SPOTLIGHT_APP="$HOME/Applications/Cli Agent.app"
-[ -d "$SPOTLIGHT_APP" ] && SPOTLIGHT=1
 # RAYCAST_CLI_AGENT_ASSET_URL is for testing only (file:// works too).
 ASSET_URL="${RAYCAST_CLI_AGENT_ASSET_URL:-https://github.com/$REPO/releases/latest/download/raycast-cli-agent.tar.gz}"
 DEST="$HOME/.config/raycast/extensions/$NAME"
@@ -96,30 +88,6 @@ CWD="$(/usr/bin/python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys
 open -g -b com.raycast.macos "raycast://cli/$NAME/build-success?cwd=$CWD&info="
 ok "Registered with Raycast"
 
-if [ "$SPOTLIGHT" = 1 ]; then
-  if [ -f "$DEST/spotlight/ask.py" ]; then
-    # Outside the extension folder, so a Raycast update can't remove it mid-use.
-    install -m 755 "$DEST/spotlight/ask.py" "$HOME_DIR/ask.py"
-    W="$(mktemp -d)"
-    sed "s|__ASK_SCRIPT__|$HOME_DIR/ask.py|" "$DEST/spotlight/AskAI.applescript" > "$W/ask.applescript"
-    mkdir -p "$HOME/Applications" "$W/icon.iconset"
-    rm -rf "$SPOTLIGHT_APP"
-    osacompile -o "$SPOTLIGHT_APP" "$W/ask.applescript"
-    for s in 16 32 128 256 512; do
-      sips -z $s $s "$DEST/assets/extension-icon.png" --out "$W/icon.iconset/icon_${s}x${s}.png" >/dev/null
-      sips -z $((s * 2)) $((s * 2)) "$DEST/assets/extension-icon.png" --out "$W/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
-    done
-    iconutil -c icns "$W/icon.iconset" -o "$SPOTLIGHT_APP/Contents/Resources/applet.icns"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string io.github.syxb2.raycast-cli-agent" "$SPOTLIGHT_APP/Contents/Info.plist" 2>/dev/null || true
-    codesign --force --deep -s - "$SPOTLIGHT_APP" 2>/dev/null || true
-    rm -rf "$W"
-    mdimport "$SPOTLIGHT_APP" 2>/dev/null || true
-    ok "Ask AI app for Spotlight: $SPOTLIGHT_APP"
-  else
-    warn "This version has no Spotlight app; skipped."
-  fi
-fi
-
 echo
 bold "Done. Search for \"Cli Agent\" commands in Raycast."
 cat <<'EOF'
@@ -130,6 +98,3 @@ cat <<'EOF'
   • To update, run this command again
   • To uninstall, press ⌘K on any of its commands in Raycast → Uninstall Extension
 EOF
-if [ "$SPOTLIGHT" = 1 ]; then
-  echo '  • Spotlight: type "Cli Agent". To remove it, delete ~/Applications/Cli Agent.app'
-fi

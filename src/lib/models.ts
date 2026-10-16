@@ -97,8 +97,6 @@ export function setCurrentModel(model: string): void {
   writeFileSync(supportFile("current-models.json"), JSON.stringify(saved), {
     mode: 0o600,
   });
-  // The standalone Spotlight helper uses the most recently selected model.
-  writeFileSync(supportFile("current-model"), model);
 }
 
 export function loadCatalog(): ModelCatalog | undefined {

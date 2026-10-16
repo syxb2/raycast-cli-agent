@@ -32,7 +32,6 @@ jobs:
         run: |
           npx ray build -e dist -o dist -I
           rm -f dist/*.map
-          cp -R spotlight dist/spotlight
           echo "${GITHUB_REF_NAME}" > dist/VERSION
           tar -czf raycast-cli-agent.tar.gz -C dist .
 

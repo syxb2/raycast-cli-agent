@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Remove the standalone Spotlight app, helper scripts and installer/release integration
+
 - Add provider Model Browser pages with vendor filtering, ordered visible model selection and default actions
 - Filter Pi discovery using native auth checks, preserving shell environment and hiding models with no configured authentication
 - Make visible models a strict whitelist and invalidate cached Pi eligibility after authentication/configuration changes
@@ -12,7 +14,6 @@
 - Replace flat native preferences with General, Codex and Pi Agent settings pages
 - Persist independent provider enablement, model menus, aliases, environment and request defaults
 - Add Codex response controls and Pi per-model thinking settings, with legacy preference initialization
-- Apply provider settings to the standalone Spotlight helper
 
 - Bind each chat to one agent, remove cross-agent context replay and restrict chat model menus to that agent
 
@@ -21,12 +22,11 @@
 - Add configuration directory overrides, native session bindings and verified Pi session recovery
 - Stream native text updates, interrupt individual Codex turns and serialize local session requests
 - Discover models from native protocols while keeping configured third-party Codex models available
-- Keep translation retries on the selected backend and update the Spotlight helper for Codex/Pi
+- Keep translation retries on the selected backend
 - Add isolated backend regression tests and release verification
 
 - Rename the extension ID to `raycast-cli-agent` and the display name and command subtitles to **Cli Agent**
 - Use the fork repository and renamed release package for installation and updates
-- Align Spotlight branding, support paths and environment variables with the new extension ID
 - Keep the original extension's settings and chat history separate
 
 ## [Show What the Model Does] - 2026-10-14
