@@ -161,6 +161,29 @@ test("Codex preserves credentials, custom provider config, streaming and local t
   assert.deepEqual(launch.args, ["app-server", "--listen", "stdio://"]);
 });
 
+test("Codex and Pi publish partial text before the request completes", async () => {
+  for (const model of ["codex:default", "pi:custom/pi-local-model"]) {
+    const updates = [];
+    let completed = false;
+    const request = backend
+      .runModel({
+        model,
+        prompt: "stream-chunks",
+        onText: (text) => updates.push(text),
+      })
+      .then((result) => {
+        completed = true;
+        return result;
+      });
+    await until(() => updates.includes("第一段，"));
+    assert.equal(completed, false, `${model} buffered its partial output`);
+    const result = await request;
+    assert.equal(result.isError, false, result.error?.message);
+    assert.equal(result.text, "第一段，第二段。");
+    assert.ok(updates.includes("第一段，第二段。"));
+  }
+});
+
 test("a conversation cannot send input to another agent", async () => {
   const before = events().filter(
     (e) => e.provider === "pi" && e.event === "launch",

@@ -25,6 +25,7 @@ import {
 } from "../lib/options";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
+import { useLoadingIndicator } from "../lib/useLoadingIndicator";
 import { ChatView, commandsMarkdown } from "./ChatView";
 import {
   ErrorActions,
@@ -53,6 +54,7 @@ export function AnswerView(props: AnswerViewProps) {
   // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useModelStream();
+  const spinner = useLoadingIndicator(stream.isLoading);
   const catalog = useModels();
 
   // Raycast wraps development extensions in React StrictMode, which mounts,
@@ -110,11 +112,12 @@ export function AnswerView(props: AnswerViewProps) {
   };
 
   const body =
-    stream.error && !stream.text
-      ? errorMarkdown(stream.error)
-      : stream.text || `_${modelLabel(model)} is thinking…_`;
+    stream.error && !stream.text ? errorMarkdown(stream.error) : stream.text;
+  const status = stream.isLoading
+    ? `\n\n_${spinner} ${stream.text ? "Generating…" : "thinking..."}_`
+    : "";
   const commands = stream.isLoading ? undefined : stream.commands;
-  const markdown = `**${escape(props.question)}**\n\n---\n\n${stepsMarkdown(stream.steps)}${commands?.length && !stream.text ? "" : body}${commandsMarkdown(commands)}`;
+  const markdown = `**${escape(props.question)}**\n\n---\n\n${stepsMarkdown(stream.steps)}${commands?.length && !stream.text ? "" : body}${status}${commandsMarkdown(commands)}`;
   const done = !stream.isLoading && !stream.error && stream.text.length > 0;
 
   return (

@@ -160,6 +160,10 @@ export function useModels() {
   const refresh = useCallback(async (force = false) => {
     setRefreshing(true);
     try {
+      // Validate cached Pi eligibility with the inherited shell environment
+      // before waiting for discovery of every enabled provider.
+      await loadEnvironment();
+      setModels(availableModels());
       const catalog = await refreshCatalog(force);
       const failures = Object.entries(catalog.errors ?? {})
         .map(([provider, message]) => `${provider}: ${message}`)

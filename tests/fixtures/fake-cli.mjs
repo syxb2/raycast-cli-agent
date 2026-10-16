@@ -67,12 +67,18 @@ const turns = new Map();
 function codexNotice(method, params) {
   send({ method, params });
 }
-function codexFinish(threadId, turnId, text, status = "completed") {
+function codexFinish(
+  threadId,
+  turnId,
+  text,
+  status = "completed",
+  delta = text,
+) {
   codexNotice("item/agentMessage/delta", {
     threadId,
     turnId,
     itemId: turnId,
-    delta: text,
+    delta,
   });
   codexNotice("item/completed", {
     threadId,
@@ -167,6 +173,27 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         reply({ turn: { id: turnId } });
         return;
       }
+      if (prompt === "stream-chunks") {
+        reply({ turn: { id: turnId } });
+        codexNotice("item/agentMessage/delta", {
+          threadId,
+          turnId,
+          itemId: turnId,
+          delta: "第一段，",
+        });
+        setTimeout(
+          () =>
+            codexFinish(
+              threadId,
+              turnId,
+              "第一段，第二段。",
+              "completed",
+              "第二段。",
+            ),
+          100,
+        );
+        return;
+      }
       if (prompt === "crash") {
         process.exit(2);
       }
@@ -212,6 +239,30 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       const prompt = record.message;
       if (prompt === "slow") {
         reply({ disposition: "started" });
+        return;
+      }
+      if (prompt === "stream-chunks") {
+        reply({ disposition: "started" });
+        send({ type: "message_start", message: { role: "assistant" } });
+        send({
+          type: "message_update",
+          assistantMessageEvent: { type: "text_delta", delta: "第一段，" },
+        });
+        setTimeout(() => {
+          send({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", delta: "第二段。" },
+          });
+          send({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "第一段，第二段。" }],
+            },
+          });
+          send({ type: "agent_end", willRetry: false });
+          send({ type: "agent_settled" });
+        }, 100);
         return;
       }
       if (prompt === "crash") process.exit(2);

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Show fallback Chat questions and loading feedback immediately, and start from eligible cached models while discovery continues
+
+- Show the first streamed text immediately and animate circular loading indicators in Chat and answers
+
 - Remove the standalone Spotlight app, helper scripts and installer/release integration
 
 - Add provider Model Browser pages with vendor filtering, ordered visible model selection and default actions

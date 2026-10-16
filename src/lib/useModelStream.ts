@@ -36,6 +36,7 @@ export function useModelStream() {
       if (opts.signal?.aborted) ac.abort();
       let text = "";
       let steps: string[] | undefined;
+      let receivedText = false;
       setState({ text: "", isLoading: true });
       const timer = setInterval(() => {
         if (controller.current !== ac) return;
@@ -49,6 +50,12 @@ export function useModelStream() {
           signal: ac.signal,
           onText: (t) => {
             text = t;
+            // Show the first content immediately. Coalesce subsequent deltas
+            // at FLUSH_MS so a fast token stream does not overwhelm Raycast.
+            if (!receivedText && t && controller.current === ac) {
+              receivedText = true;
+              setState((s) => ({ ...s, text: t, steps }));
+            }
           },
           onSteps: (s) => {
             steps = s;

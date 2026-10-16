@@ -31,6 +31,7 @@ import {
   titleFrom,
 } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
+import { useLoadingIndicator } from "../lib/useLoadingIndicator";
 import { chatModelChoices, selectChatModel } from "../lib/chat";
 import { HistoryView } from "./HistoryView";
 import { SettingsView } from "./SettingsView";
@@ -56,12 +57,31 @@ export function ChatView({
   const [conversation, setConversation] = useState<Conversation>(
     () => initial ?? newConversation(currentModel(), defaultOptions()),
   );
-  const [input, setInput] = useState("");
+  // Match Raycast's initial fallback search text, then clear it when sending.
+  // Starting with an empty value lets its delayed prefill overwrite our reset.
+  const [input, setInput] = useState(firstQuestion?.trim() || "");
+  // Fallback launches already contain a question. Render its pending row on
+  // the first frame, before model discovery or the CLI has finished starting.
+  const [queuedQuestion, setQueuedQuestion] = useState<Message | undefined>(
+    () =>
+      firstQuestion?.trim()
+        ? {
+            id: crypto.randomUUID(),
+            question: firstQuestion.trim(),
+            answer: "",
+            createdAt: Date.now(),
+            model: conversation.model,
+          }
+        : undefined,
+  );
   const [selectedId, setSelectedId] = useState<string | undefined>(
-    conversation.messages.at(-1)?.id,
+    queuedQuestion?.id ?? conversation.messages.at(-1)?.id,
   );
   const [pendingId, setPendingId] = useState<string | undefined>();
   const stream = useModelStream();
+  const isLoading = Boolean(queuedQuestion) || stream.isLoading;
+  const spinner = useLoadingIndicator(isLoading);
+  const displayedPendingId = queuedQuestion?.id ?? pendingId;
   const catalog = useModels();
   const models = chatModelChoices(conversation, catalog.models);
   const sentFirst = useRef(false);
@@ -69,9 +89,23 @@ export function ChatView({
   const activeId = useRef(conversation.id);
 
   useEffect(() => {
+    if (!firstQuestion?.trim() || sentFirst.current || queuedQuestion) return;
+    // Raycast can deliver fallback launch props after the initial render.
+    const message: Message = {
+      id: crypto.randomUUID(),
+      question: firstQuestion.trim(),
+      answer: "",
+      createdAt: Date.now(),
+      model: conversation.model,
+    };
+    setQueuedQuestion(message);
+    setSelectedId(message.id);
+    setInput(firstQuestion.trim());
+  }, [firstQuestion]);
+
+  useEffect(() => {
     if (
       conversation.messages.length ||
-      catalog.isRefreshing ||
       !getProviderSettings(conversation.provider).enabled ||
       matchingValue(conversation.model, models)
     )
@@ -105,7 +139,7 @@ export function ChatView({
       return;
     }
     const msg: Message = {
-      id: crypto.randomUUID(),
+      id: queuedQuestion?.id ?? crypto.randomUUID(),
       question: q,
       answer: "",
       createdAt: Date.now(),
@@ -117,6 +151,7 @@ export function ChatView({
       messages: [...from.messages, msg],
     };
     setConversation(base);
+    setQueuedQuestion(undefined);
     setInput("");
     setSelectedId(msg.id);
     setPendingId(msg.id);
@@ -151,12 +186,19 @@ export function ChatView({
 
   useEffect(() => {
     // Deferred for the same StrictMode reason as in AnswerView.
-    if (!firstQuestion || sentFirst.current || catalog.isRefreshing) return;
+    if (!firstQuestion || sentFirst.current) return;
     if (!matchingValue(conversation.model, models)) {
+      if (catalog.isRefreshing) return;
+      // The default may have become available after loading the shell's
+      // environment; let the normalization effect select it before sending.
+      if (matchingValue(currentModel(conversation.provider), models)) return;
+      sentFirst.current = true;
+      setQueuedQuestion(undefined);
       setInput(firstQuestion);
       return;
     }
     const timer = setTimeout(() => {
+      if (sentFirst.current) return;
       sentFirst.current = true;
       send(firstQuestion);
     }, 0);
@@ -173,9 +215,20 @@ export function ChatView({
     return () => clearTimeout(timer);
   }, [autoRun]);
 
+  const stop = () => {
+    if (queuedQuestion) {
+      sentFirst.current = true;
+      setInput(queuedQuestion.question);
+      setQueuedQuestion(undefined);
+    }
+    stream.stop();
+  };
+
   const startNew = (
     provider: Provider = getSettings().general.defaultProvider,
   ) => {
+    sentFirst.current = true;
+    setQueuedQuestion(undefined);
     stream.stop();
     const model =
       provider === conversation.provider
@@ -240,31 +293,35 @@ export function ChatView({
   // Pending: what the model is doing so far, then the text as it arrives.
   const detailOf = (m: Message) => {
     const question = `**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n`;
-    if (m.id === pendingId) {
-      return `${question}${stepsMarkdown(stream.steps)}${stream.text || `_${modelLabel(m.model ?? conversation.model)} is thinking…_`}`;
+    if (m.id === displayedPendingId) {
+      const status = stream.text ? "Generating…" : "thinking...";
+      return `${question}${stepsMarkdown(stream.steps)}${stream.text}${stream.text ? "\n\n" : ""}_${spinner} ${status}_`;
     }
     return `${question}${stepsMarkdown(m.steps)}${m.error ?? m.answer}${commandsMarkdown(m.commands)}${footerMarkdown(m.model, modelLabel, m.durationMs)}`;
   };
 
-  const messages = [...conversation.messages].reverse();
-  const sendAction = input.trim() ? (
-    <Action
-      title="Send Message"
-      icon={Icon.ArrowUp}
-      onAction={() => send(input)}
-    />
-  ) : null;
+  const messages = queuedQuestion
+    ? [queuedQuestion, ...[...conversation.messages].reverse()]
+    : [...conversation.messages].reverse();
+  const sendAction =
+    input.trim() && !isLoading ? (
+      <Action
+        title="Send Message"
+        icon={Icon.ArrowUp}
+        onAction={() => send(input)}
+      />
+    ) : null;
 
   return (
     <List
       navigationTitle={[
-        conversation.title || "New Chat",
+        conversation.title || queuedQuestion?.question || "New Chat",
         ...optionBadges(conversation.options),
       ].join(" · ")}
-      isLoading={stream.isLoading}
+      isLoading={isLoading}
       isShowingDetail={messages.length > 0}
       searchBarPlaceholder={
-        conversation.messages.length
+        messages.length
           ? "Ask a follow-up, press ↵ to send"
           : "Ask anything, press ↵ to send"
       }
@@ -351,10 +408,13 @@ export function ChatView({
               key={m.id}
               id={m.id}
               title={m.question}
+              accessories={
+                m.id === displayedPendingId ? [{ text: spinner }] : undefined
+              }
               icon={
                 m.error
                   ? Icon.ExclamationMark
-                  : m.id === pendingId
+                  : m.id === displayedPendingId
                     ? Icon.CircleProgress
                     : m.commands?.length
                       ? Icon.Terminal
@@ -398,12 +458,12 @@ export function ChatView({
                       />
                     </>
                   ) : null}
-                  {stream.isLoading ? (
+                  {isLoading ? (
                     <Action
                       title="Stop"
                       icon={Icon.Stop}
                       shortcut={STOP_SHORTCUT}
-                      onAction={stream.stop}
+                      onAction={stop}
                     />
                   ) : null}
                   {m.id === pendingId && stream.error ? (
