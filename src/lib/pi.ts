@@ -11,7 +11,12 @@ import {
   supportDirectory,
 } from "./backend/environment";
 import { JsonLineProcess, RecordValue } from "./backend/rpc";
-import { finishResult, instructions, splitCommands } from "./backend/result";
+import {
+  finishResult,
+  instructions,
+  splitCommands,
+  usesReviewedCommands,
+} from "./backend/result";
 import {
   loadNativeSession,
   NativeSession,
@@ -38,15 +43,15 @@ async function launchPi(opts?: RunOptions): Promise<{
     );
   const configDir = configDirectory("pi", env);
   const native = loadNativeSession(opts?.sessionId, "pi", configDir);
-  const args = [
-    "--mode",
-    "rpc",
-    "--no-extensions",
-    "--no-mcp",
-    "--no-skills",
-    "--no-prompt-templates",
-    "--no-context-files",
-  ];
+  const args = ["--mode", "rpc"];
+  if (!opts?.allowAllTools)
+    args.push(
+      "--no-extensions",
+      "--no-mcp",
+      "--no-skills",
+      "--no-prompt-templates",
+      "--no-context-files",
+    );
   if (opts) {
     args.push("--system-prompt", instructions(opts));
     const model = piModelId(opts.model ?? PI_DEFAULT);
@@ -55,7 +60,8 @@ async function launchPi(opts?: RunOptions): Promise<{
     const thinking = opts.effort || getProviderSettings("pi").thinkingLevel;
     if (thinking) args.push("--thinking", thinking);
   }
-  if (opts?.tools || opts?.readDirs?.length)
+  if (opts?.allowAllTools) args.push("--tools", "*");
+  else if (opts?.tools || opts?.readDirs?.length)
     args.push("--tools", "read,grep,find,ls");
   else args.push("--no-tools");
   if (!opts?.sessionId) args.push("--no-session");
@@ -137,7 +143,7 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
   let runStarted = false;
   const publish = () => {
     text = messages.filter(Boolean).join("\n\n");
-    opts.onText?.(opts.tools ? splitCommands(text).text : text);
+    opts.onText?.(usesReviewedCommands(opts) ? splitCommands(text).text : text);
   };
   const onAbort = () => {
     if (rpc && !rpc.isClosed)
@@ -150,7 +156,7 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
   };
   try {
     opts.signal?.throwIfAborted();
-    if (opts.webSearch)
+    if (opts.webSearch && !opts.allowAllTools)
       throw new Error(
         "Pi has no built-in web search in this extension. Disable Web Search or select Codex.",
       );

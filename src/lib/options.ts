@@ -1,7 +1,8 @@
 import { currentModel } from "./models";
-import { providerOf } from "./provider";
+import { Provider, providerOf } from "./provider";
 
 import {
+  CLAUDE_EFFORTS,
   CODEX_EFFORTS,
   PI_THINKING_LEVELS,
   Effort,
@@ -10,17 +11,21 @@ import {
 export type { Effort } from "./settings";
 
 export function effortsForProvider(
-  provider: "codex" | "pi",
+  provider: Provider,
 ): { value: Effort; title: string }[] {
-  return (provider === "codex" ? CODEX_EFFORTS : PI_THINKING_LEVELS).map(
-    (value) => ({
-      value,
-      title:
-        value === "xhigh"
-          ? "Extra High"
-          : value[0].toUpperCase() + value.slice(1),
-    }),
-  );
+  return (
+    provider === "codex"
+      ? CODEX_EFFORTS
+      : provider === "claude"
+        ? CLAUDE_EFFORTS
+        : PI_THINKING_LEVELS
+  ).map((value) => ({
+    value,
+    title:
+      value === "xhigh"
+        ? "Extra High"
+        : value[0].toUpperCase() + value.slice(1),
+  }));
 }
 
 // What a request may use beyond plain text. Everything is off by default:
@@ -42,7 +47,9 @@ export function defaultOptions(model = currentModel()): RequestOptions {
     webSearch:
       provider === "codex"
         ? getProviderSettings("codex").webSearch || undefined
-        : undefined,
+        : provider === "claude"
+          ? getProviderSettings("claude").webSearch || undefined
+          : undefined,
     // Leave reasoning unset so the backend can resolve provider/model defaults.
     tools: settings.tools || undefined,
   };
@@ -56,10 +63,17 @@ export function effortTitle(effort: Effort | undefined): string {
 }
 
 // Short markers for titles: "Web · Tools · High".
-export function optionBadges(o: RequestOptions | undefined): string[] {
+export function optionBadges(
+  o: RequestOptions | undefined,
+  model?: string,
+): string[] {
   const badges: string[] = [];
-  if (o?.webSearch) badges.push("Web");
-  if (o?.tools) badges.push("Tools");
+  if (model && getProviderSettings(providerOf(model)).allowAllTools)
+    badges.push("All Tools");
+  else {
+    if (o?.webSearch) badges.push("Web");
+    if (o?.tools) badges.push("Tools");
+  }
   if (o?.effort) badges.push(effortTitle(o.effort));
   return badges;
 }
@@ -68,7 +82,12 @@ export function optionsForModel(
   options: RequestOptions,
   model: string,
 ): RequestOptions {
-  return providerOf(model) === "pi"
-    ? { ...options, webSearch: undefined }
-    : options;
+  const provider = providerOf(model);
+  return {
+    ...options,
+    webSearch: provider === "pi" ? undefined : options.webSearch,
+    effort: effortsForProvider(provider).some((e) => e.value === options.effort)
+      ? options.effort
+      : undefined,
+  };
 }

@@ -88,9 +88,13 @@ export function configDirectory(
   const value =
     provider === "codex"
       ? settings.configDir || env.CODEX_HOME || join(homedir(), ".codex")
-      : settings.configDir ||
-        env.PI_CODING_AGENT_DIR ||
-        join(homedir(), ".pi/agent");
+      : provider === "claude"
+        ? settings.configDir ||
+          env.CLAUDE_CONFIG_DIR ||
+          join(homedir(), ".claude")
+        : settings.configDir ||
+          env.PI_CODING_AGENT_DIR ||
+          join(homedir(), ".pi/agent");
   return expandPath(value);
 }
 
@@ -106,8 +110,11 @@ export function providerEnvironment(
   };
   return {
     ...env,
-    [provider === "codex" ? "CODEX_HOME" : "PI_CODING_AGENT_DIR"]:
-      configDirectory(provider, env),
+    [provider === "codex"
+      ? "CODEX_HOME"
+      : provider === "claude"
+        ? "CLAUDE_CONFIG_DIR"
+        : "PI_CODING_AGENT_DIR"]: configDirectory(provider, env),
   };
 }
 
@@ -170,7 +177,9 @@ export function runtimeFingerprint(
   const files =
     provider === "codex"
       ? ["config.toml", "auth.json"]
-      : ["settings.json", "models.json", "auth.json"];
+      : provider === "claude"
+        ? ["settings.json", ".credentials.json", ".claude.json"]
+        : ["settings.json", "models.json", "auth.json"];
   return createHash("sha256")
     .update(
       JSON.stringify([

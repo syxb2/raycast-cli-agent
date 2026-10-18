@@ -1,19 +1,26 @@
-export type Provider = "codex" | "pi";
+export const PROVIDERS = ["codex", "pi", "claude"] as const;
+export type Provider = (typeof PROVIDERS)[number];
 
 export const CODEX_PREFIX = "codex:";
 export const PI_PREFIX = "pi:";
+export const CLAUDE_PREFIX = "claude:";
 
 // Runs Codex with its own configured default model (no -m).
 export const CODEX_DEFAULT = `${CODEX_PREFIX}default`;
 export const PI_DEFAULT = `${PI_PREFIX}default`;
+export const CLAUDE_DEFAULT = `${CLAUDE_PREFIX}default`;
+
+export function nativeDefault(provider: Provider): string {
+  return `${provider}:default`;
+}
 
 export function isSupportedModel(model: string): boolean {
-  return model.startsWith(CODEX_PREFIX) || model.startsWith(PI_PREFIX);
+  return PROVIDERS.some((provider) => model.startsWith(`${provider}:`));
 }
 
 export function providerOf(model: string): Provider {
   if (!isSupportedModel(model)) throw new Error(`Unsupported model: ${model}`);
-  return model.startsWith(PI_PREFIX) ? "pi" : "codex";
+  return model.slice(0, model.indexOf(":")) as Provider;
 }
 
 export function codexModelId(model: string): string | undefined {
@@ -24,6 +31,7 @@ export function codexModelId(model: string): string | undefined {
 export const PROVIDER_NAMES: Record<Provider, string> = {
   codex: "Codex",
   pi: "Pi Agent",
+  claude: "Claude Code",
 };
 
 export function piModelId(

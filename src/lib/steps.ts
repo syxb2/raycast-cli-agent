@@ -56,3 +56,21 @@ export function stepsMarkdown(steps: string[] | undefined): string {
   if (!steps?.length) return "";
   return `${steps.map((s) => `> ${s}`).join("  \n")}\n\n`;
 }
+
+export function claudeToolStep(
+  name: string,
+  input: Record<string, unknown>,
+): string {
+  if (name === "WebSearch") return webStep(String(input.query || ""));
+  if (name === "WebFetch") return webStep(String(input.url || ""));
+  return piToolStep(
+    name === "Read"
+      ? "read"
+      : name === "Grep"
+        ? "grep"
+        : name === "Glob"
+          ? "find"
+          : name,
+    input,
+  );
+}

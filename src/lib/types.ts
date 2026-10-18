@@ -8,10 +8,13 @@ export interface RateLimit {
 }
 
 export interface RunOptions extends RequestOptions {
+  // Resolved from this provider's current settings for every request; never
+  // stored in conversation options or inherited from another provider.
+  allowAllTools?: boolean;
   prompt: string;
   model?: string;
   systemPrompt?: string;
-  // Local conversation identity mapped to one Codex thread or Pi session file.
+  // Local conversation identity mapped to one native CLI session.
   sessionId?: string;
   signal?: AbortSignal;
   onText?: (fullText: string) => void;

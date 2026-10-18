@@ -26,7 +26,7 @@ export class JsonLineProcess {
     args: string[],
     cwd: string,
     env: NodeJS.ProcessEnv,
-    private protocol: "codex" | "pi",
+    private protocol: "codex" | "pi" | "claude",
   ) {
     this.child = spawn(command, args, {
       cwd,
@@ -94,7 +94,13 @@ export class JsonLineProcess {
       this.send(
         this.protocol === "codex"
           ? { id, method, params }
-          : { id, type: method, ...params },
+          : this.protocol === "claude"
+            ? {
+                type: "control_request",
+                request_id: String(id),
+                request: { subtype: method, ...params },
+              }
+            : { id, type: method, ...params },
       );
     });
   }
@@ -120,6 +126,21 @@ export class JsonLineProcess {
 
   private receive(record: RecordValue): void {
     if (!record || typeof record !== "object") return;
+    if (this.protocol === "claude" && record.type === "control_response") {
+      const response = record.response;
+      const id = Number(response?.request_id);
+      const pending = this.pending.get(id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pending.delete(id);
+        if (response.subtype === "error")
+          pending.reject(
+            new Error(response.error || "Claude control request failed."),
+          );
+        else pending.resolve(response.response ?? {});
+      }
+      return;
+    }
     const response =
       this.protocol === "codex"
         ? !record.method && record.id !== undefined

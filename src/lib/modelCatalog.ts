@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { showToast, Toast } from "@raycast/api";
 import { fetchCodexModels } from "./codex";
 import { fetchPiModels } from "./pi";
+import { fetchClaudeModels } from "./claude";
 import {
   availableModels,
   loadCatalog,
@@ -10,19 +11,24 @@ import {
 } from "./models";
 import { loadEnvironment, providerFingerprint } from "./backend/environment";
 import { getProviderSettings, updateProviderSettings } from "./settings";
-import { Provider, providerOf } from "./provider";
+import { Provider, PROVIDERS, providerOf } from "./provider";
+
+const fetchProviderModels = (provider: Provider) =>
+  ({
+    codex: fetchCodexModels,
+    pi: fetchPiModels,
+    claude: fetchClaudeModels,
+  })[provider]();
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let pending: Promise<ModelCatalog> | undefined;
 
 async function fingerprint(): Promise<string> {
   await loadEnvironment();
-  return (["codex", "pi"] as const)
-    .map((provider) => {
-      if (!getProviderSettings(provider).enabled) return `${provider}:disabled`;
-      return providerFingerprint(provider);
-    })
-    .join(":");
+  return PROVIDERS.map((provider) => {
+    if (!getProviderSettings(provider).enabled) return `${provider}:disabled`;
+    return providerFingerprint(provider);
+  }).join(":");
 }
 
 function initializeVisibility(
@@ -38,7 +44,10 @@ function initializeVisibility(
   )?.resolvedModel;
   const selected =
     actual.find(
-      (m) => m.value === settings.defaultModel || m.value === nativeDefault,
+      (m) =>
+        m.value === settings.defaultModel ||
+        m.value === nativeDefault ||
+        m.resolvedModel === nativeDefault,
     ) ?? actual[0];
   if (selected)
     updateProviderSettings(provider, { visibleModels: [selected.value] });
@@ -49,6 +58,7 @@ async function discover(force: boolean): Promise<ModelCatalog> {
   const providerFingerprints = {
     codex: providerFingerprint("codex"),
     pi: providerFingerprint("pi"),
+    claude: providerFingerprint("claude"),
   };
   const cached = loadCatalog();
   if (
@@ -57,13 +67,14 @@ async function discover(force: boolean): Promise<ModelCatalog> {
     Date.now() - cached.fetchedAt < MAX_AGE_MS
   )
     return cached;
-  const providers: Provider[] = ["codex", "pi"];
-  const results = await Promise.allSettled([
-    getProviderSettings("codex").enabled
-      ? fetchCodexModels()
-      : Promise.resolve([]),
-    getProviderSettings("pi").enabled ? fetchPiModels() : Promise.resolve([]),
-  ]);
+  const providers = PROVIDERS;
+  const results = await Promise.allSettled(
+    providers.map((provider) =>
+      getProviderSettings(provider).enabled
+        ? fetchProviderModels(provider)
+        : Promise.resolve([]),
+    ),
+  );
   const models = results.flatMap((result, i) => {
     if (result.status === "fulfilled") return result.value;
     return cached?.providerFingerprints[providers[i]] ===
@@ -113,9 +124,7 @@ export async function refreshProviderCatalog(
   if (!getProviderSettings(provider).enabled)
     throw new Error(`Enable ${provider} before discovering its models.`);
   const key = await fingerprint();
-  const models = await (provider === "codex"
-    ? fetchCodexModels()
-    : fetchPiModels());
+  const models = await fetchProviderModels(provider);
   if ((await fingerprint()) !== key)
     throw new Error(
       "Provider configuration changed during discovery. Refresh models again.",

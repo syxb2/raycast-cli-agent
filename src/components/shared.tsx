@@ -10,15 +10,19 @@ import { ModelError } from "../lib/types";
 import { groupByProvider, ModelOption, sameModel } from "../lib/models";
 import { effortsForProvider, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
+import { resolveClaudeBinary } from "../lib/claude";
 import { resolvePiBinary } from "../lib/pi";
 import { SettingsView } from "./SettingsView";
 import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
+import { getProviderSettings } from "../lib/settings";
 
 function loginCommand(provider: Provider | undefined): string {
   if (provider === "codex") {
     // Codex may only exist inside the ChatGPT app, so use the resolved path.
     return `'${(resolveCodexBinary() ?? "codex").replace(/'/g, "'\\''")}' login`;
   }
+  if (provider === "claude")
+    return `'${(resolveClaudeBinary() ?? "claude").replace(/'/g, "'\\''")}' auth login`;
   return `'${(resolvePiBinary() ?? "pi").replace(/'/g, "'\\''")}'`;
 }
 
@@ -135,9 +139,12 @@ export function OptionActions(props: {
   model: string;
 }) {
   const { options, onChange } = props;
+  const allowAllTools = getProviderSettings(
+    providerOf(props.model),
+  ).allowAllTools;
   return (
     <ActionPanel.Section title="Options">
-      {providerOf(props.model) === "codex" ? (
+      {providerOf(props.model) !== "pi" && !allowAllTools ? (
         <Action
           title={options.webSearch ? "Disable Web Search" : "Enable Web Search"}
           icon={Icon.Globe}
@@ -147,7 +154,7 @@ export function OptionActions(props: {
           }
         />
       ) : null}
-      {props.showTools ? (
+      {props.showTools && !allowAllTools ? (
         <Action
           title={
             options.tools ? "Disable Tools" : "Enable Tools (Files and Shell)"

@@ -11,7 +11,12 @@ import {
   supportDirectory,
 } from "./backend/environment";
 import { JsonLineProcess, RecordValue } from "./backend/rpc";
-import { finishResult, instructions, splitCommands } from "./backend/result";
+import {
+  finishResult,
+  instructions,
+  splitCommands,
+  usesReviewedCommands,
+} from "./backend/result";
 import { loadNativeSession, saveNativeSession } from "./backend/sessions";
 
 export function resolveCodexBinary(): string | undefined {
@@ -40,7 +45,7 @@ function omitAbsentConfig(value: RecordValue): RecordValue {
   );
 }
 
-async function acquireRuntime(): Promise<{
+async function acquireRuntime(allowAllTools = false): Promise<{
   rpc: JsonLineProcess;
   env: NodeJS.ProcessEnv;
   release: () => void;
@@ -51,7 +56,8 @@ async function acquireRuntime(): Promise<{
     throw new Error(
       "Codex CLI not found. Open Cli Agent Settings → Codex → CLI Path.",
     );
-  const key = runtimeFingerprint("codex", binary, env);
+  // Permission policies must never share a server or its resumed thread state.
+  const key = `${runtimeFingerprint("codex", binary, env)}:${allowAllTools}`;
   let entry = runtimes.get(key);
   if (!entry || entry.process.isClosed) {
     const rpc = new JsonLineProcess(
@@ -61,14 +67,20 @@ async function acquireRuntime(): Promise<{
       env,
       "codex",
     );
-    // Native mutation requests are denied; the UI owns approved shell execution.
+    // Restricted runs leave mutation approval to the UI. Full tool access
+    // authorizes native commands and file changes within this runtime only.
     rpc.onRecord((record) => {
       if (record.id === undefined || !record.method) return;
       let result: RecordValue | undefined;
       if (record.method === "item/permissions/requestApproval")
-        result = { permissions: {}, scope: "turn" };
+        result = {
+          permissions: allowAllTools
+            ? omitAbsentConfig(record.params?.permissions ?? {})
+            : {},
+          scope: "turn",
+        };
       else if (record.method.endsWith("requestApproval"))
-        result = { decision: "decline" };
+        result = { decision: allowAllTools ? "accept" : "decline" };
       else if (record.method === "item/tool/requestUserInput")
         result = { answers: {} };
       rpc.send(
@@ -155,7 +167,7 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
   });
   const publish = () => {
     text = [...messages.values()].filter(Boolean).join("\n\n");
-    opts.onText?.(opts.tools ? splitCommands(text).text : text);
+    opts.onText?.(usesReviewedCommands(opts) ? splitCommands(text).text : text);
   };
   const interrupt = () => {
     if (interrupted || !threadId || !turnId || !lease) return;
@@ -171,7 +183,7 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
   const onAbort = () => interrupt();
   try {
     opts.signal?.throwIfAborted();
-    lease = await acquireRuntime();
+    lease = await acquireRuntime(opts.allowAllTools);
     const { rpc, env } = lease;
     const cwd = opts.readDirs?.[0] || supportDirectory("workspace");
     const { config } = await rpc.request("config/read", {
@@ -182,19 +194,22 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
     const configDir = configDirectory("codex", env);
     const native = loadNativeSession(opts.sessionId, "codex", configDir);
     const providerSettings = getProviderSettings("codex");
-    const readable = Boolean(opts.tools || opts.readDirs?.length);
+    const allowAllTools = Boolean(opts.allowAllTools);
+    const readable = Boolean(
+      allowAllTools || opts.tools || opts.readDirs?.length,
+    );
     const overrides: RecordValue = {
-      web_search: opts.webSearch ? "live" : "disabled",
+      web_search: allowAllTools || opts.webSearch ? "live" : "disabled",
       "features.shell_tool": readable,
       "features.unified_exec": readable,
-      "features.apply_patch": false,
-      "features.multi_agent": false,
-      "features.apps": false,
-      "features.plugins": false,
+      "features.apply_patch": allowAllTools,
+      "features.multi_agent": allowAllTools,
+      "features.apps": allowAllTools,
+      "features.plugins": allowAllTools,
     };
     if (providerSettings.responseVerbosity !== "default")
       overrides.model_verbosity = providerSettings.responseVerbosity;
-    if (config.mcp_servers) {
+    if (!allowAllTools && config.mcp_servers) {
       // Config RPC overrides use structured values, not TOML-quoted path keys.
       // Keep transport fields so replacing the table remains valid.
       overrides.mcp_servers = Object.fromEntries(
@@ -211,8 +226,8 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
         ? { modelProvider: config.model_provider }
         : {}),
       cwd,
-      sandbox: "read-only",
-      approvalPolicy: "on-request",
+      sandbox: allowAllTools ? "danger-full-access" : "read-only",
+      approvalPolicy: allowAllTools ? "never" : "on-request",
       approvalsReviewer: "user",
       developerInstructions: instructions(opts),
       config: overrides,
@@ -264,7 +279,7 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
         if (steps.size) opts.onSteps?.([...steps.values()]);
       } else if (
         record.method === "item/commandExecution/requestApproval" &&
-        opts.tools &&
+        usesReviewedCommands(opts) &&
         p.command
       ) {
         commands.push(p.command);

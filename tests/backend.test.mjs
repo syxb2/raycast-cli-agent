@@ -19,14 +19,21 @@ import { pathToFileURL } from "node:url";
 const dir = mkdtempSync(join(tmpdir(), "cli-agent-test-"));
 const codexDir = join(dir, "codex");
 const piDir = join(dir, "pi");
-for (const path of [codexDir, piDir]) {
+const claudeDir = join(dir, "claude");
+for (const path of [codexDir, piDir, claudeDir]) {
   mkdirSync(path);
   writeFileSync(join(path, "fixture.json"), "{}");
 }
 const codexPath = join(dir, "fake-codex");
 const piPath = join(dir, "fake-pi");
-for (const path of [codexPath, piPath]) {
-  copyFileSync("tests/fixtures/fake-cli.mjs", path);
+const claudePath = join(dir, "fake-claude");
+for (const path of [codexPath, piPath, claudePath]) {
+  copyFileSync(
+    path === claudePath
+      ? "tests/fixtures/fake-claude-cli.mjs"
+      : "tests/fixtures/fake-cli.mjs",
+    path,
+  );
   chmodSync(path, 0o755);
 }
 const preferences = {
@@ -300,6 +307,283 @@ test("native and proposed shell commands wait for UI approval", async () => {
   );
   assert.ok(launch.args.includes("--no-mcp"));
 });
+
+test("older settings default all tool access to off for every agent", () => {
+  const file = join(dir, "support", "settings.json");
+  const original = readFileSync(file, "utf8");
+  try {
+    const stored = JSON.parse(original);
+    for (const provider of ["codex", "pi", "claude"])
+      delete stored.providers[provider].allowAllTools;
+    writeFileSync(file, JSON.stringify(stored));
+    for (const provider of ["codex", "pi", "claude"])
+      assert.equal(backend.getProviderSettings(provider).allowAllTools, false);
+  } finally {
+    writeFileSync(file, original);
+  }
+});
+
+for (const provider of ["codex", "pi", "claude"]) {
+  test(`${provider} full tool access is independent and reversible in an existing chat`, async () => {
+    const settings = backend.getProviderSettings(provider);
+    const model = `${provider}:default`;
+    const sessionId = `all-tools-${provider}`;
+    const launchFor = () =>
+      events()
+        .filter((e) => e.provider === provider && e.event === "launch")
+        .at(-1);
+    const configDir = { codex: codexDir, pi: piDir, claude: claudeDir }[
+      provider
+    ];
+    try {
+      backend.updateProviderSettings(provider, {
+        enabled: true,
+        cliPath: { codex: codexPath, pi: piPath, claude: claudePath }[provider],
+        configDir,
+        allowAllTools: false,
+      });
+      const first = await backend.runModel({
+        model,
+        sessionId,
+        prompt: "first",
+      });
+      assert.equal(first.isError, false, first.error?.message);
+      const native = backend.loadNativeSession(sessionId, provider, configDir);
+
+      backend.updateProviderSettings(provider, { allowAllTools: true });
+      for (const other of ["codex", "pi", "claude"].filter(
+        (p) => p !== provider,
+      ))
+        assert.equal(backend.getProviderSettings(other).allowAllTools, false);
+      assert.deepEqual(
+        backend.optionBadges({ tools: false, webSearch: false }, model),
+        ["All Tools"],
+      );
+      const start = events().length;
+      const full = await backend.runModel({
+        model,
+        sessionId,
+        prompt: "approve",
+        tools: true,
+        webSearch: false,
+      });
+      assert.equal(full.isError, false, full.error?.message);
+      assert.equal(full.commands, undefined);
+      assert.equal(
+        backend.loadNativeSession(sessionId, provider, configDir).id,
+        native.id,
+      );
+      const launch = launchFor();
+      if (provider === "codex") {
+        const params = requests("thread/resume").at(-1).record.params;
+        assert.equal(params.sandbox, "danger-full-access");
+        assert.equal(params.approvalPolicy, "never");
+        assert.equal(params.config.web_search, "live");
+        for (const feature of [
+          "shell_tool",
+          "unified_exec",
+          "apply_patch",
+          "multi_agent",
+          "apps",
+          "plugins",
+        ])
+          assert.equal(params.config[`features.${feature}`], true);
+        assert.equal(params.config.mcp_servers, undefined);
+        assert.ok(
+          !params.developerInstructions.includes("File tools are read-only"),
+        );
+        await until(() =>
+          events()
+            .slice(start)
+            .some(
+              (e) =>
+                e.record?.id === "permissions-approval" &&
+                e.record?.result?.permissions?.network?.enabled,
+            ),
+        );
+        assert.ok(
+          events()
+            .slice(start)
+            .some(
+              (e) =>
+                e.record?.id === "approval" &&
+                e.record?.result?.decision === "accept",
+            ),
+        );
+        assert.ok(
+          events()
+            .slice(start)
+            .some(
+              (e) =>
+                e.record?.id === "file-approval" &&
+                e.record?.result?.decision === "accept",
+            ),
+        );
+        const grant = events()
+          .slice(start)
+          .find(
+            (e) => e.record?.id === "permissions-approval" && e.record?.result,
+          );
+        assert.deepEqual(grant.record.result, {
+          permissions: { network: { enabled: true } },
+          scope: "turn",
+        });
+
+        // Another restricted request cannot inherit the full-access server.
+        backend.updateProviderSettings(provider, { allowAllTools: false });
+        const restricted = await backend.runModel({
+          model,
+          prompt: "isolated",
+        });
+        assert.equal(restricted.isError, false, restricted.error?.message);
+        assert.equal(
+          requests("thread/start").at(-1).record.params.sandbox,
+          "read-only",
+        );
+        assert.notEqual(requests("thread/start").at(-1).pid, launch.pid);
+      } else if (provider === "claude") {
+        assert.equal(
+          launch.args[launch.args.indexOf("--tools") + 1],
+          "default",
+        );
+        assert.equal(
+          launch.args[launch.args.indexOf("--permission-mode") + 1],
+          "bypassPermissions",
+        );
+        for (const flag of [
+          "--allowedTools",
+          "--disallowedTools",
+          "--strict-mcp-config",
+          "--mcp-config",
+          "--settings",
+          "--disable-slash-commands",
+        ])
+          assert.ok(!launch.args.includes(flag));
+        assert.equal(
+          launch.args[launch.args.indexOf("--system-prompt-snapshot") + 1],
+          "off",
+        );
+        assert.ok(
+          !launch.args[launch.args.indexOf("--system-prompt") + 1].includes(
+            "File tools are read-only",
+          ),
+        );
+        await until(() =>
+          events()
+            .slice(start)
+            .some((e) => e.record?.response?.request_id === "deny-bash"),
+        );
+        const reply = events()
+          .slice(start)
+          .find((e) => e.record?.response?.request_id === "deny-bash");
+        assert.deepEqual(reply.record.response.response, {
+          behavior: "allow",
+          updatedInput: { command: "touch denied.txt" },
+        });
+
+        await backend.fetchClaudeModels();
+        const probe = launchFor();
+        assert.equal(probe.args[probe.args.indexOf("--tools") + 1], "");
+        assert.equal(
+          probe.args[probe.args.indexOf("--permission-mode") + 1],
+          "default",
+        );
+        assert.ok(probe.args.includes("--strict-mcp-config"));
+      } else {
+        assert.equal(launch.args[launch.args.indexOf("--tools") + 1], "*");
+        for (const flag of [
+          "--no-tools",
+          "--no-extensions",
+          "--no-mcp",
+          "--no-skills",
+          "--no-context-files",
+          "--no-prompt-templates",
+        ])
+          assert.ok(!launch.args.includes(flag));
+        assert.ok(
+          !launch.args[launch.args.indexOf("--system-prompt") + 1].includes(
+            "File tools are read-only",
+          ),
+        );
+        assert.equal(
+          backend.loadNativeSession(sessionId, provider, configDir).file,
+          native.file,
+        );
+      }
+
+      backend.updateProviderSettings(provider, { allowAllTools: false });
+      const revertedStart = events().length;
+      const reverted = await backend.runModel({
+        model,
+        sessionId,
+        prompt: "approve",
+        tools: true,
+        // Persisted/request options cannot override the provider setting.
+        allowAllTools: true,
+      });
+      assert.equal(reverted.isError, false, reverted.error?.message);
+      assert.deepEqual(reverted.commands, ["touch reviewed.txt"]);
+      assert.deepEqual(backend.optionBadges({ tools: true }, model), ["Tools"]);
+      assert.equal(
+        backend.loadNativeSession(sessionId, provider, configDir).id,
+        native.id,
+      );
+      if (provider === "codex") {
+        const params = requests("thread/resume").at(-1).record.params;
+        assert.equal(params.sandbox, "read-only");
+        assert.equal(params.approvalPolicy, "on-request");
+        assert.equal(params.config["features.apply_patch"], false);
+        assert.equal(params.config.mcp_servers.xcode.enabled, false);
+        assert.ok(
+          params.developerInstructions.includes("File tools are read-only"),
+        );
+        await until(() =>
+          events()
+            .slice(revertedStart)
+            .some(
+              (e) =>
+                e.record?.id === "permissions-approval" && e.record?.result,
+            ),
+        );
+        const replies = events().slice(revertedStart);
+        assert.equal(
+          replies.find((e) => e.record?.id === "approval" && e.record?.result)
+            .record.result.decision,
+          "decline",
+        );
+        assert.equal(
+          replies.find(
+            (e) => e.record?.id === "file-approval" && e.record?.result,
+          ).record.result.decision,
+          "decline",
+        );
+        assert.deepEqual(
+          replies.find(
+            (e) => e.record?.id === "permissions-approval" && e.record?.result,
+          ).record.result.permissions,
+          {},
+        );
+      } else {
+        const args = launchFor().args;
+        assert.equal(
+          args[args.indexOf("--tools") + 1],
+          provider === "pi" ? "read,grep,find,ls" : "Read,Glob,Grep",
+        );
+        assert.ok(
+          args.includes(provider === "pi" ? "--no-mcp" : "--strict-mcp-config"),
+        );
+        if (provider === "claude") {
+          const reply = events()
+            .slice(revertedStart)
+            .find((e) => e.record?.response?.request_id === "deny-bash");
+          assert.equal(reply.record.response.response.behavior, "deny");
+        }
+      }
+    } finally {
+      backend.updateProviderSettings(provider, settings);
+    }
+  });
+}
 
 test("Pi reuses local config and persists/resumes its exact native session", async () => {
   const first = await backend.runModel({
@@ -1007,4 +1291,312 @@ test("provider environment overrides are literal and validated without shell eva
     /line 1/,
   );
   assert.deepEqual(backend.getProviderSettings("pi"), before);
+});
+
+test("Claude is an independent opt-in provider with validated models and effort", () => {
+  assert.equal(backend.providerOf("claude:sonnet"), "claude");
+  assert.equal(backend.getProviderSettings("claude").enabled, false);
+  assert.equal(backend.normalizeProviderModel("claude", "opus"), "claude:opus");
+  assert.throws(() => backend.normalizeProviderModel("claude", "pi:default"));
+  assert.deepEqual(
+    backend.effortsForProvider("claude").map((e) => e.value),
+    ["low", "medium", "high", "xhigh", "max"],
+  );
+  assert.throws(() =>
+    backend.updateProviderSettings("claude", { effort: "off" }),
+  );
+});
+
+test("Claude discovers native models, respects visibility, aliases and defaults", async () => {
+  const settings = backend.getProviderSettings("claude");
+  const previous = backend.loadCatalog();
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+    });
+    const start = events().length;
+    await backend.refreshProviderCatalog("claude");
+    assert.equal(
+      backend.modelLabel("claude:default"),
+      "claude: claude-sonnet-test",
+    );
+    assert.equal(
+      backend.sameModel("claude:sonnet", "claude:claude-sonnet-test"),
+      true,
+    );
+    assert.equal(backend.currentModel("claude"), "claude:default");
+    const launch = events()
+      .slice(start)
+      .find((e) => e.event === "launch");
+    assert.ok(launch.args.includes("--no-session-persistence"));
+    assert.ok(launch.keyPreserved && launch.proxyPreserved);
+    assert.ok(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.type === "user").length === 0,
+    );
+    backend.updateProviderSettings("claude", {
+      customModels: ["claude:claude-sonnet-test", "claude:default"],
+    });
+    assert.equal(
+      backend
+        .browserModels("claude")
+        .filter((m) => backend.sameModel(m.value, "claude:sonnet")).length,
+      1,
+    );
+    assert.ok(
+      backend
+        .browserModels("claude")
+        .every((m) => m.value !== "claude:default"),
+    );
+    backend.setVisibleModels("claude", ["claude:opus"]);
+    backend.updateProviderSettings("claude", {
+      modelAliases: { "claude:claude-opus-test": "My Claude" },
+    });
+    assert.equal(
+      backend.visibleProviderModels("claude")[0].title,
+      "claude: My Claude",
+    );
+    assert.equal(
+      backend.groupByProvider(backend.availableModels()).at(-1).provider,
+      "claude",
+    );
+    backend.setVisibleModels("claude", []);
+    await backend.refreshProviderCatalog("claude");
+    assert.deepEqual(backend.visibleProviderModels("claude"), []);
+  } finally {
+    backend.updateProviderSettings("claude", settings);
+    if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("Claude streams without duplicate final text and resumes the bound native session", async () => {
+  const settings = backend.getProviderSettings("claude");
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+      effort: "high",
+    });
+    const updates = [];
+    const result = await backend.runModel({
+      model: "claude:sonnet",
+      sessionId: "claude-chat",
+      prompt: "first",
+      onText: (text) => updates.push(text),
+    });
+    assert.equal(result.isError, false, result.error?.message);
+    assert.equal(result.text, "Claude answer: first");
+    assert.ok(updates.includes("Claude "));
+    const native = backend.loadNativeSession(
+      "claude-chat",
+      "claude",
+      claudeDir,
+    );
+    assert.ok(native.id);
+    const second = await backend.runModel({
+      model: "claude:opus",
+      sessionId: "claude-chat",
+      prompt: "follow-up",
+      effort: "low",
+      webSearch: true,
+      tools: true,
+    });
+    assert.equal(second.isError, false, second.error?.message);
+    const launch = events()
+      .filter((e) => e.provider === "claude" && e.event === "launch")
+      .at(-1);
+    assert.ok(launch.args.includes(`--resume=${native.id}`));
+    assert.equal(launch.args[launch.args.indexOf("--model") + 1], "opus");
+    assert.equal(launch.args[launch.args.indexOf("--effort") + 1], "low");
+    assert.equal(
+      launch.args[launch.args.indexOf("--tools") + 1],
+      "Read,Glob,Grep,WebSearch,WebFetch",
+    );
+    assert.ok(launch.args.includes("--strict-mcp-config"));
+    assert.equal(
+      backend.loadNativeSession("claude-chat", "claude", claudeDir).id,
+      native.id,
+    );
+    const denied = await backend.runModel({
+      model: "pi:default",
+      sessionId: "claude-chat",
+      prompt: "never send",
+    });
+    assert.match(denied.error.message, /bound to claude/);
+  } finally {
+    backend.updateProviderSettings("claude", settings);
+  }
+});
+
+test("Claude refuses wrong or missing native sessions before sending user text", async () => {
+  const settings = backend.getProviderSettings("claude");
+  const fixture = join(claudeDir, "fixture.json");
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+    });
+    writeFileSync(fixture, JSON.stringify({ mismatch: true }));
+    const start = events().length;
+    const result = await backend.runModel({
+      model: "claude:default",
+      sessionId: "claude-chat",
+      prompt: "must not be sent",
+    });
+    assert.match(result.error.message, /different session/);
+    assert.ok(
+      !events()
+        .slice(start)
+        .some((e) => e.record?.message?.content === "must not be sent"),
+    );
+    writeFileSync(fixture, "{}");
+    backend.saveNativeSession("claude-missing", "claude", {
+      id: "missing-native-session",
+      configDir: claudeDir,
+    });
+    const missing = await backend.runModel({
+      model: "claude:default",
+      sessionId: "claude-missing",
+      prompt: "must not be sent",
+    });
+    assert.match(missing.error.message, /session missing/);
+  } finally {
+    writeFileSync(fixture, "{}");
+    backend.updateProviderSettings("claude", settings);
+  }
+});
+
+test("Claude cancellation, crashes, errors and command approval settle safely", async () => {
+  const settings = backend.getProviderSettings("claude");
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+    });
+    const approval = await backend.runModel({
+      model: "claude:default",
+      prompt: "approve",
+      tools: true,
+    });
+    assert.deepEqual(approval.commands, ["touch reviewed.txt"]);
+    assert.equal(approval.text, "Review this.");
+    const reply = events().findLast(
+      (e) => e.record?.response?.request_id === "deny-bash",
+    );
+    assert.equal(reply.record.response.response.behavior, "deny");
+    const crash = await backend.runModel({
+      model: "claude:default",
+      prompt: "crash",
+    });
+    assert.equal(crash.isError, true);
+    const error = await backend.runModel({
+      model: "claude:default",
+      prompt: "error",
+    });
+    assert.equal(error.error.kind, "not-logged-in");
+    const controller = new AbortController();
+    const pending = backend.runModel({
+      model: "claude:default",
+      prompt: "slow",
+      signal: controller.signal,
+    });
+    await until(() =>
+      events().some(
+        (e) => e.provider === "claude" && e.record?.message?.content === "slow",
+      ),
+    );
+    controller.abort();
+    assert.equal((await pending).error.kind, "cancelled");
+    backend.updateProviderSettings("claude", {
+      cliPath: join(dir, "missing-claude"),
+    });
+    const missing = await backend.runModel({
+      model: "claude:default",
+      prompt: "no CLI",
+    });
+    assert.equal(missing.error.kind, "not-installed");
+  } finally {
+    backend.updateProviderSettings("claude", settings);
+  }
+});
+
+test("Claude CLI defaults follow native settings and environment without inference", async () => {
+  const settings = backend.getProviderSettings("claude");
+  const previous = backend.loadCatalog();
+  const nativeSettings = join(claudeDir, "settings.json");
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+    });
+    writeFileSync(nativeSettings, JSON.stringify({ model: "opus" }));
+    await backend.refreshProviderCatalog("claude");
+    assert.equal(
+      backend.resolvedModel("claude:default"),
+      "claude:claude-opus-test",
+    );
+    assert.deepEqual(backend.getProviderSettings("claude").visibleModels, [
+      "claude:opus",
+    ]);
+    backend.updateProviderSettings("claude", {
+      environmentVariables: "ANTHROPIC_MODEL=my-gateway-model",
+      visibleModels: null,
+      customModels: ["custom-other"],
+    });
+    await backend.refreshProviderCatalog("claude");
+    assert.equal(
+      backend.resolvedModel("claude:default"),
+      "claude:my-gateway-model",
+    );
+    assert.ok(
+      backend
+        .browserModels("claude")
+        .some((m) => m.value === "claude:custom-other"),
+    );
+    backend.updateProviderSettings("claude", {
+      modelAliases: { "claude:opus": "Claude Opus" },
+    });
+    assert.equal(backend.modelLabel("claude:opus"), "claude: Claude Opus");
+    writeFileSync(nativeSettings, JSON.stringify({ model: "sonnet" }));
+    assert.deepEqual(backend.browserModels("claude"), []);
+    backend.updateProviderSettings("claude", { enabled: false });
+    const start = events().length;
+    const result = await backend.runModel({
+      model: "claude:default",
+      prompt: "disabled",
+    });
+    assert.match(result.error.message, /disabled/);
+    assert.equal(events().length, start);
+  } finally {
+    rmSync(nativeSettings, { force: true });
+    backend.updateProviderSettings("claude", settings);
+    if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("Claude can be the sole enabled and default provider", () => {
+  const previous = backend.getSettings();
+  try {
+    backend.updateProviderSettings("claude", { enabled: true });
+    backend.updateProviderSettings("codex", { enabled: false });
+    backend.updateProviderSettings("pi", { enabled: false });
+    assert.equal(backend.getSettings().general.defaultProvider, "claude");
+    assert.deepEqual(backend.enabledProviders(), ["claude"]);
+    assert.throws(
+      () => backend.updateProviderSettings("claude", { enabled: false }),
+      /at least one/,
+    );
+  } finally {
+    backend.updateProviderSettings("codex", previous.providers.codex);
+    backend.updateProviderSettings("pi", previous.providers.pi);
+    backend.updateProviderSettings("claude", previous.providers.claude);
+    backend.updateGeneralSettings(previous.general);
+  }
 });

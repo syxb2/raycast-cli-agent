@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { Provider } from "../provider";
+import { Provider, PROVIDERS } from "../provider";
 import { supportDirectory } from "./environment";
 
 export interface NativeSession {
@@ -31,11 +31,9 @@ function readBinding(sessionId: string): SessionBinding | undefined {
   const file = bindingFile(sessionId);
   if (!existsSync(file)) return undefined;
   const saved = JSON.parse(readFileSync(file, "utf8"));
-  if (saved.provider === "codex" || saved.provider === "pi") return saved;
+  if (PROVIDERS.includes(saved.provider)) return saved;
   // Convert old single-agent records without retaining multi-agent bindings.
-  const providers = (["codex", "pi"] as const).filter(
-    (provider) => saved[provider],
-  );
+  const providers = PROVIDERS.filter((provider) => saved[provider]);
   if (providers.length !== 1)
     throw new Error(
       "This legacy chat has multiple or invalid agent bindings. Start a new chat.",

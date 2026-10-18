@@ -316,7 +316,7 @@ export function ChatView({
     <List
       navigationTitle={[
         conversation.title || queuedQuestion?.question || "New Chat",
-        ...optionBadges(conversation.options),
+        ...optionBadges(conversation.options, conversation.model),
       ].join(" · ")}
       isShowingDetail={messages.length > 0}
       searchBarPlaceholder={
@@ -393,7 +393,7 @@ export function ChatView({
           title="New Chat"
           description={[
             modelLabel(conversation.model),
-            ...optionBadges(conversation.options),
+            ...optionBadges(conversation.options, conversation.model),
             catalog.error,
             "Type a question and press ↵",
           ]

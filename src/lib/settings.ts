@@ -9,10 +9,11 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
+  CLAUDE_DEFAULT,
+  PROVIDERS,
   CODEX_DEFAULT,
   CODEX_PREFIX,
   PI_DEFAULT,
-  PI_PREFIX,
   Provider,
   isSupportedModel,
   piModelId,
@@ -56,6 +57,7 @@ export interface ProviderSettings {
   visibleModels: string[] | null;
   modelAliases: Record<string, string>;
   tools: boolean;
+  allowAllTools: boolean;
 }
 
 export interface CodexSettings extends ProviderSettings {
@@ -66,6 +68,19 @@ export interface CodexSettings extends ProviderSettings {
   reasoningSummary: "default" | "auto" | "concise" | "detailed" | "none";
 }
 
+export const CLAUDE_EFFORTS: Effort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+export interface ClaudeSettings extends ProviderSettings {
+  effort: Effort | "";
+  webSearch: boolean;
+}
+
 export interface PiSettings extends ProviderSettings {
   thinkingLevel: Effort | "";
   preferredThinkingByModel: Record<string, Effort>;
@@ -74,6 +89,7 @@ export interface PiSettings extends ProviderSettings {
 export interface ProviderSettingsMap {
   codex: CodexSettings;
   pi: PiSettings;
+  claude: ClaudeSettings;
 }
 export interface Settings {
   version: 1;
@@ -92,6 +108,7 @@ export function defaultSettings(): Settings {
     visibleModels: null,
     modelAliases: {},
     tools: false,
+    allowAllTools: false,
   });
   return {
     version: 1,
@@ -110,6 +127,13 @@ export function defaultSettings(): Settings {
         responseStyle: "default",
         responseVerbosity: "default",
         reasoningSummary: "default",
+      },
+      claude: {
+        ...common(),
+        enabled: false,
+        defaultModel: CLAUDE_DEFAULT,
+        effort: "",
+        webSearch: false,
       },
       pi: {
         ...common(),
@@ -197,6 +221,7 @@ export function getSettings(): Settings {
     providers: {
       codex: { ...defaults.providers.codex, ...stored.providers?.codex },
       pi: { ...defaults.providers.pi, ...stored.providers?.pi },
+      claude: { ...defaults.providers.claude, ...stored.providers?.claude },
     },
   };
 }
@@ -209,9 +234,7 @@ export function getProviderSettings<P extends Provider>(
 
 export function enabledProviders(): Provider[] {
   const settings = getSettings();
-  return (["codex", "pi"] as const).filter(
-    (provider) => settings.providers[provider].enabled,
-  );
+  return PROVIDERS.filter((provider) => settings.providers[provider].enabled);
 }
 
 export function parseEnvironmentVariables(
@@ -245,9 +268,7 @@ export function normalizeProviderModel(
   model: string,
 ): string {
   const value = model.trim();
-  const normalized = isSupportedModel(value)
-    ? value
-    : `${provider === "codex" ? CODEX_PREFIX : PI_PREFIX}${value}`;
+  const normalized = isSupportedModel(value) ? value : `${provider}:${value}`;
   if (!value || providerOf(normalized) !== provider)
     throw new Error(`Choose a ${provider} model for these settings.`);
   if (provider === "pi") piModelId(normalized);
@@ -255,14 +276,14 @@ export function normalizeProviderModel(
 }
 
 function validateSettings(settings: Settings): void {
-  if (!settings.providers.codex.enabled && !settings.providers.pi.enabled)
+  if (!PROVIDERS.some((provider) => settings.providers[provider].enabled))
     throw new Error("Keep at least one provider enabled.");
   if (!settings.providers[settings.general.defaultProvider]?.enabled) {
-    settings.general.defaultProvider = settings.providers.codex.enabled
-      ? "codex"
-      : "pi";
+    settings.general.defaultProvider = PROVIDERS.find(
+      (provider) => settings.providers[provider].enabled,
+    )!;
   }
-  for (const provider of ["codex", "pi"] as const) {
+  for (const provider of PROVIDERS) {
     const value = settings.providers[provider];
     value.cliPath = value.cliPath.trim();
     value.configDir = value.configDir.trim();
@@ -303,6 +324,9 @@ function validateSettings(settings: Settings): void {
     )
   )
     throw new Error("Invalid Codex reasoning summary.");
+  const claude = settings.providers.claude;
+  if (claude.effort && !CLAUDE_EFFORTS.includes(claude.effort))
+    throw new Error("Invalid Claude reasoning effort.");
   const pi = settings.providers.pi;
   if (pi.thinkingLevel && !PI_THINKING_LEVELS.includes(pi.thinkingLevel))
     throw new Error("Invalid Pi thinking level.");

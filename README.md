@@ -4,7 +4,7 @@
 
 Author and maintainer: **Carol White**.
 
-A Raycast extension for asking questions, chatting, translating and rewriting text through your locally configured **Codex CLI** or **Pi Agent CLI**.
+A Raycast extension for asking questions, chatting, translating and rewriting text through your locally configured **Codex CLI**, **Pi Agent CLI** or **Claude Code CLI**.
 
 The repo is a fork of [CLI Assistant](https://github.com/umitaltintas/raycast-cli-assistant), originally created by umitaltintas.
 
@@ -31,7 +31,7 @@ npm ci
 npm run dev
 ```
 
-Open Raycast's **Settings** command with the **Cli Agent** subtitle. Settings are organized into **General**, **Codex** and **Pi Agent**, with independent provider records, following Claudian's provider settings structure. Each provider remembers its own model selection.
+Open Raycast's **Settings** command with the **Cli Agent** subtitle. Settings are organized into **General**, **Codex**, **Pi Agent** and **Claude Code**, with independent provider records, following Claudian's provider settings structure. Each provider remembers its own model selection.
 
 ```bash
 npm test                                     # Isolated backend protocol regression tests
@@ -49,11 +49,16 @@ The extension preserves provider credentials and exported environment variables.
 | Backend | Configuration and authentication | Native protocol |
 | --- | --- | --- |
 | Codex | `CODEX_HOME`, defaulting to `~/.codex`; includes `config.toml`, configured model providers and existing CLI authentication | `codex app-server --listen stdio://`, JSON-RPC initialize, thread start/resume and turn notifications |
+| Claude Code | `CLAUDE_CONFIG_DIR`, defaulting to `~/.claude`; existing native authentication, user settings and provider environment | `claude --print --input-format stream-json --output-format stream-json`, control initialization and native session resume |
 | Pi Agent | `PI_CODING_AGENT_DIR`, defaulting to `~/.pi/agent`; includes `settings.json`, `models.json` and `auth.json` | `pi --mode rpc`, state validation, prompt and streaming events |
 
 **Codex third-party models:** configure `model`, `model_provider` and the corresponding `[model_providers.<name>]` section in your existing `config.toml`, as you would for the CLI. The provider's **Follow CLI Configuration** default resolves to that configured model. The backend does not pass `--ignore-user-config`, remove API keys or force the OpenAI provider. A third-party provider without a model-list endpoint still exposes its configured model in the menu.
 
-**Pi models:** **Follow CLI Configuration** resolves Pi's active model through its native state. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry. Chat menus show concrete models as `codex: model-id` or `pi: provider/model-id`, with no selectable agent-only entries.
+**Pi models:** **Follow CLI Configuration** resolves Pi's active model through its native state. Explicit selections use `pi:provider/model-id`; provider names and model IDs come from Pi's configured model registry. Chat menus show concrete models as `codex: model-id`, `pi: provider/model-id` or `claude: model-id`, with no selectable agent-only entries.
+
+**Claude Code:** enable it in **Settings → Claude Code**, then choose **Save and Discover Models** or open **Model Browser** (⌘B). It is disabled by default for existing installations. Discovery uses the configured CLI's control initialization catalog without sending user input, without a model inference request or persisted probe session; it is not a remote model-access or billing check. The native catalog plus the user model setting/environment resolves **Follow CLI Configuration** to the active model. Aliases such as `sonnet` and `opus` keep the CLI-reported resolved model identity; extra models also accept custom gateway IDs. No hardcoded model-version list is used. Claude's existing authentication and `ANTHROPIC_*` / cloud-provider environment are inherited. Use `claude auth login` if authentication is needed.
+
+Claude reasoning accepts Low, Medium, High, Extra High and Max, subject to the selected model and CLI version. A chat override wins over the provider default. Native metadata/control protocol and `--effort` support are required; unsupported CLI versions report an error. The adapter uses Claude Code's [CLI flags](https://code.claude.com/docs/en/cli-reference) and control wire protocol rather than installing an additional Agent SDK runtime.
 
 **Environment:** a login shell supplies exported API keys, proxy variables and PATH that a GUI process may lack. These values remain in memory. Restart the extension process after changing shell exports. Changes to the global CLI configuration files invalidate the cached model catalog and create a fresh Codex runtime while retaining native thread bindings.
 
@@ -61,12 +66,13 @@ Each provider's **Configuration Directory** field overrides its environment vari
 
 ## Provider settings
 
-The **Settings** command has three pages:
+The **Settings** command has four pages:
 
 | Page | Settings |
 | --- | --- |
 | General | Default agent, primary and secondary languages, shared extra instructions |
 | Codex | Enablement, CLI path, configuration directory, default/extra/visible models, aliases, reasoning effort, response style, verbosity, reasoning summary, web search, tools and environment overrides |
+| Claude Code | Enablement, CLI path, configuration directory, model browser, default/extra/visible models, aliases, reasoning effort, web search, tools and environment overrides |
 | Pi Agent | Enablement, CLI path, configuration directory, model browser, default/visible models, aliases, thinking level, thinking per model, tools and environment overrides |
 
 Open **Model Browser** from the provider's action menu (⌘B). It supports search, filtering by model provider, selecting visible models, reordering, setting the default, and refreshing discovery. **Save and Discover Models** also saves edited paths/environment and queries only that agent.
@@ -83,7 +89,7 @@ Reasoning uses the chat's explicit choice first, then Pi's model-specific thinki
 
 At least one provider must remain enabled. Disabling the default agent selects another enabled agent as the default for new requests. Disabled agents disappear from new-chat and model menus and cannot receive new requests; existing chats retain their original binding and can resume when the agent is re-enabled.
 
-Settings are stored as `settings.json` in the extension's support directory, with separate `general`, `providers.codex` and `providers.pi` records and file permissions `0600`. On first use, available legacy Raycast preferences and the previous selected model initialize this document. Subsequent changes use the Settings command rather than the old flat Raycast preference fields.
+Settings are stored as `settings.json` in the extension's support directory, with separate `general`, `providers.codex`, `providers.pi` and `providers.claude` records and file permissions `0600`. On first use, available legacy Raycast preferences and the previous selected model initialize this document. Subsequent changes use the Settings command rather than the old flat Raycast preference fields.
 
 Environment overrides use literal `KEY=value` lines, optionally quoted. Shell substitutions are never evaluated. These manually entered overrides are saved locally; native authentication files are not copied. Changes to shell exports require restarting the extension process, while provider overrides take effect on subsequent requests.
 
@@ -94,7 +100,7 @@ Environment overrides use literal `KEY=value` lines, optionally quoted. Shell su
 | Ask AI | Answer a question from a command argument or Raycast fallback search. An empty question opens Chat. |
 | Chat | Multi-turn conversation bound to one agent; models can change within that agent. |
 | Chat History | Search, reopen or delete local conversations. |
-| Settings | Open General, Codex and Pi Agent configuration pages. |
+| Settings | Open General, Codex, Pi Agent and Claude Code configuration pages. |
 | Ask About Selection | Ask a question about selected text, with clipboard fallback. |
 | Ask About Finder Selection | Pass selected paths to the CLI for read-only file questions. |
 | Fix Spelling and Grammar | Correct selected text and paste the result in place. |
@@ -106,21 +112,26 @@ Environment overrides use literal `KEY=value` lines, optionally quoted. Shell su
 
 Rewriting requires an actual selection. Auto translation uses the primary and secondary languages, checks direction and output language, and retries on the same selected backend/model. Short Auto inputs can make three concurrent requests for language classification and both translation directions.
 
-On an answer: paste to the active app, copy, continue in Chat, regenerate, ask another model, or stop. Chat and answer views stream text and display tool steps. Codex and Pi both stream native text updates.
+On an answer: paste to the active app, copy, continue in Chat, regenerate, ask another model, or stop. Chat and answer views stream text and display tool steps. Codex, Pi and Claude Code stream native text updates.
 
 ## Tools and options
 
 | Option | Behavior |
 | --- | --- |
-| Web Search | Codex's native search; only shown for Codex. Pi has no built-in web search in this extension. |
+| Web Search | Codex's native search or Claude Code's WebSearch/WebFetch; available for Codex and Claude Code. |
 | Tools | Read files and propose shell commands for review. |
-| Reasoning Effort | Override Codex effort or Pi thinking level; support depends on the selected model. Choose Provider Default to inherit the provider and model settings. |
+| Allow all tools | Independent setting for each agent, off by default. Allows direct command execution, file edits and native configured integrations; takes precedence over Tools and Web Search for every request, including existing chats. |
+| Reasoning Effort | Override Codex/Claude effort or Pi thinking level; support depends on the selected model. Choose Provider Default to inherit the provider and model settings. |
 | Extra Instructions | Added to every request, including translation and rewriting. |
-| Extra Models | Configured per provider; model IDs may omit that provider's `codex:` or `pi:` prefix. |
+| Extra Models | Configured per provider; model IDs may omit that provider's `codex:`, `pi:` or `claude:` prefix. |
 
-Codex runs in a read-only sandbox and native approval requests are denied. Shell tools are disabled when file access is unnecessary. Pi exposes only `read,grep,find,ls` for file requests and disables its tools for plain text tasks. Extensions, MCP and plugin tools are disabled for these requests; this restriction does not replace model, provider or authentication settings.
+With Allow all tools off, Codex runs in a read-only sandbox and native approval requests are denied. Shell tools are disabled when file access is unnecessary. Pi exposes only `read,grep,find,ls` for file requests and disables its tools for plain text tasks. Extensions, MCP and plugin tools are disabled for these requests; this restriction does not replace model, provider or authentication settings.
 
-Mutation commands are displayed for review. Once approved, the extension runs the exact command in a local login shell and returns its output to the conversation. Those approved commands execute outside the CLI's read-only restrictions. Commands have a 120-second timeout and at most 20,000 output characters are returned to the model.
+With Allow all tools off, Claude exposes only Read/Glob/Grep for file access and WebSearch/WebFetch when web search is enabled. Bash, editing, subagent and MCP tools are disabled, hooks and slash commands are disabled for the invocation, and native permission requests are denied. These invocation options leave authentication and the native model/provider configuration in place. Finder paths are added as read context; Claude uses a stable extension workspace so changing those paths does not change the native session location.
+
+With Allow all tools on, Codex uses full access without approval prompts and enables shell, patch, multi-agent, app, plugin and web-search tools while retaining native MCP configuration. Claude uses all built-in tools with permission checks bypassed and loads its native configured MCP, plugins, hooks and skills. Pi enables all discovered tools, including bash/edit/write and configured extension/MCP tools. Native disabled integrations and external account or administrator restrictions still apply. Model discovery remains restricted and never receives full tool access.
+
+In restricted mode, mutation commands are displayed for review. Once approved, the extension runs the exact command in a local login shell and returns its output to the conversation. Those approved commands execute outside the CLI's read-only restrictions. Commands have a 120-second timeout and at most 20,000 output characters are returned to the model. Direct tool execution with Allow all tools on uses the native CLI's execution behavior instead.
 
 Finder selection supplies context and a working directory, not an exact-file access boundary. File tools may read additional files accessible to the CLI. The extension does not implement its own PDF or document parser.
 
@@ -131,6 +142,7 @@ The extension keeps all chat management local:
 - `conversations/<id>.json`: messages, model choices, options and timestamps; Raycast LocalStorage holds the searchable index.
 - `sessions/bindings/<session-id>.json`: one fixed agent and its native session identity and configuration directory.
 - Codex keeps its native rollout in its own configured home. The extension resumes the recorded thread through the current app-server.
+- Claude keeps native history in its configured home; the extension saves the returned session ID and resumes that exact ID, checking native initialization metadata and validating the session ID reported by the run. One-shot requests and metadata probes disable session persistence.
 - Pi session files are kept under the extension's `sessions/pi` directory and resumed by exact file path. The reported native identity is verified before any user prompt is sent.
 - Before sending the first message, a new chat's model menu offers all enabled agents. Selecting another agent creates a fresh draft with its own session identity and defaults. After sending, the chat is bound to that agent and its model menu only shows that agent's models. Use **New Chat with Agent** to start another chat; conversation history is never replayed to another agent.
 - Older single-agent bindings are converted when used. Old chats with multiple agent bindings must be replaced with a new chat; their stored history is retained.

@@ -1,5 +1,6 @@
 import { runCodex } from "./codex";
 import { runPi } from "./pi";
+import { runClaude } from "./claude";
 import { getProviderSettings } from "./settings";
 import { currentModel } from "./models";
 import { providerOf } from "./provider";
@@ -10,15 +11,23 @@ export async function runModel(opts: RunOptions): Promise<RunResult> {
   const model = opts.model ?? currentModel();
   try {
     const provider = providerOf(model);
-    if (!getProviderSettings(provider).enabled)
+    const settings = getProviderSettings(provider);
+    if (!settings.enabled)
       throw new Error(
         `${provider} is disabled. Enable it in Cli Agent Settings.`,
       );
     return await serializeSession(opts.sessionId, () => {
       claimSessionProvider(opts.sessionId, provider);
+      const request = {
+        ...opts,
+        model,
+        allowAllTools: getProviderSettings(provider).allowAllTools,
+      };
       return provider === "codex"
-        ? runCodex({ ...opts, model })
-        : runPi({ ...opts, model });
+        ? runCodex(request)
+        : provider === "claude"
+          ? runClaude(request)
+          : runPi(request);
     });
   } catch (error) {
     return {

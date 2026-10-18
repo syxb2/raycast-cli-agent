@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Group web search, read-only tool settings and full tool access below Tool Access in that order in each agent's settings page
+
+- Add an independent Allow all tools setting for Codex, Claude Code and Pi Agent; enable direct command/file tools and native configured integrations when selected, with restricted access kept as the default
+
+- Add Claude Code CLI support with independent settings, model discovery without inference, streaming and resumable chats, read-only tools and reviewed commands
+
 - Remove the animated top loading bar while Chat and answer views are thinking or generating; keep inline status indicators and Stop actions
 - Require changelog maintenance for each change and Codex attribution in agent-assisted commits
 - Ignore local `docs` directories and mark the GitHub release task as complete

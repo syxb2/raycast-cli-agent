@@ -8,6 +8,10 @@ export const APPROVAL_INSTRUCTIONS = [
   "The user will review it before the application runs it and sends its output back.",
 ].join(" ");
 
+export function usesReviewedCommands(opts: RunOptions): boolean {
+  return Boolean(opts.tools && !opts.allowAllTools);
+}
+
 export function instructions(opts: RunOptions): string {
   let prompt = systemPrompt(opts.systemPrompt);
   if (!opts.systemPrompt && opts.model && providerOf(opts.model) === "codex") {
@@ -20,7 +24,9 @@ export function instructions(opts: RunOptions): string {
     }[style];
     if (instruction) prompt += `\n\n${instruction}`;
   }
-  return opts.tools ? `${prompt}\n\n${APPROVAL_INSTRUCTIONS}` : prompt;
+  return usesReviewedCommands(opts)
+    ? `${prompt}\n\n${APPROVAL_INSTRUCTIONS}`
+    : prompt;
 }
 
 export function splitCommands(text: string): {
@@ -65,7 +71,9 @@ export function finishResult(
   error?: unknown,
   commands: string[] = [],
 ): RunResult {
-  const split = opts.tools ? splitCommands(text) : { text, commands: [] };
+  const split = usesReviewedCommands(opts)
+    ? splitCommands(text)
+    : { text, commands: [] };
   const allCommands = [...new Set([...commands, ...split.commands])];
   return {
     text: split.text,

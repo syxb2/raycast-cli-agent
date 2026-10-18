@@ -18,18 +18,18 @@ import {
   browserModels,
   modelLabel,
   ModelOption,
-  resolvedModel,
   sameModel,
 } from "../lib/models";
 import { ModelBrowser } from "./ModelBrowser";
 import {
-  CODEX_DEFAULT,
-  PI_DEFAULT,
+  PROVIDERS,
+  nativeDefault as providerDefault,
   Provider,
   PROVIDER_NAMES,
   providerOf,
 } from "../lib/provider";
 import {
+  CLAUDE_EFFORTS,
   CODEX_EFFORTS,
   PI_THINKING_LEVELS,
   CodexSettings,
@@ -69,7 +69,7 @@ export function SettingsView() {
         />
       </List.Section>
       <List.Section title="Providers">
-        {(["codex", "pi"] as const).map((provider) => (
+        {PROVIDERS.map((provider) => (
           <List.Item
             key={provider}
             title={PROVIDER_NAMES[provider]}
@@ -163,11 +163,9 @@ function GeneralSettingsForm() {
         value={values.defaultProvider}
         onChange={(value) => set("defaultProvider", value as Provider)}
       >
-        {(["codex", "pi"] as const)
-          .filter((p) => enabled[p].enabled)
-          .map((p) => (
-            <Form.Dropdown.Item key={p} value={p} title={PROVIDER_NAMES[p]} />
-          ))}
+        {PROVIDERS.filter((p) => enabled[p].enabled).map((p) => (
+          <Form.Dropdown.Item key={p} value={p} title={PROVIDER_NAMES[p]} />
+        ))}
       </Form.Dropdown>
       <Form.Dropdown
         id="primaryLanguage"
@@ -194,7 +192,7 @@ function GeneralSettingsForm() {
         title="Extra Instructions"
         value={values.extraInstructions}
         onChange={(value) => set("extraInstructions", value)}
-        placeholder="Tone, language preferences and other instructions for both agents"
+        placeholder="Tone, language preferences and other instructions for all agents"
       />
     </Form>
   );
@@ -273,12 +271,12 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       next.visibleModels !== null &&
       !next.visibleModels.some((id) => sameModel(id, next.defaultModel))
     )
-      next.defaultModel =
-        next.visibleModels[0] ??
-        (provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT);
+      next.defaultModel = next.visibleModels[0] ?? providerDefault(provider);
     if (key === "defaultModel") {
-      const actual = resolvedModel(next.defaultModel);
-      if (browserModels(provider).some((m) => m.value === actual))
+      const actual = browserModels(provider).find((model) =>
+        sameModel(model.value, next.defaultModel),
+      )?.value;
+      if (actual)
         next.visibleModels = [
           actual,
           ...(next.visibleModels ?? []).filter((id) => id !== actual),
@@ -292,14 +290,14 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       setSaveError(error instanceof Error ? error.message : String(error));
     }
   };
-  const nativeDefault = provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT;
+  const nativeDefault = providerDefault(provider);
   const choices = models.filter(
     (model) =>
       providerOf(model.value) === provider && model.value !== nativeDefault,
   );
   for (const raw of [
     nativeDefault,
-    ...(provider === "codex" ? draft.customModelsText.split(/[\n,]/) : []),
+    ...(provider !== "pi" ? draft.customModelsText.split(/[\n,]/) : []),
   ]) {
     try {
       const value = normalizeProviderModel(provider, raw);
@@ -340,6 +338,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       visibleModels: value.visibleModels,
       modelAliases: assignments(value.aliasesText),
       tools: value.tools,
+      allowAllTools: value.allowAllTools,
     };
     if (provider === "codex")
       updateProviderSettings("codex", {
@@ -349,6 +348,12 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         responseStyle: value.responseStyle,
         responseVerbosity: value.responseVerbosity,
         reasoningSummary: value.reasoningSummary,
+      });
+    else if (provider === "claude")
+      updateProviderSettings("claude", {
+        ...common,
+        effort: value.effort,
+        webSearch: value.webSearch,
       });
     else
       updateProviderSettings("pi", {
@@ -392,7 +397,11 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
     }
   };
   const reasoningChoices =
-    provider === "codex" ? CODEX_EFFORTS : PI_THINKING_LEVELS;
+    provider === "codex"
+      ? CODEX_EFFORTS
+      : provider === "claude"
+        ? CLAUDE_EFFORTS
+        : PI_THINKING_LEVELS;
   return (
     <Form
       navigationTitle={`${PROVIDER_NAMES[provider]} Settings`}
@@ -450,7 +459,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         placeholder={
           provider === "codex"
             ? "CODEX_HOME or ~/.codex"
-            : "PI_CODING_AGENT_DIR or ~/.pi/agent"
+            : provider === "claude"
+              ? "CLAUDE_CONFIG_DIR or ~/.claude"
+              : "PI_CODING_AGENT_DIR or ~/.pi/agent"
         }
         value={draft.configDir}
         onChange={(value) => set("configDir", value)}
@@ -478,14 +489,14 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           />
         ))}
       </Form.Dropdown>
-      {provider === "codex" ? (
+      {provider !== "pi" ? (
         <Form.TextArea
           id="customModels"
           title="Extra Models"
           placeholder={
             provider === "codex"
               ? "my-model\ncodex:another-model"
-              : "openai/my-model\npi:anthropic/another-model"
+              : "sonnet\nclaude:my-custom-model"
           }
           value={draft.customModelsText}
           onChange={(value) => set("customModelsText", value)}
@@ -524,15 +535,15 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       />
       <Form.Separator />
       <Form.Description
-        title={provider === "codex" ? "Responses" : "Thinking"}
+        title={provider !== "pi" ? "Responses" : "Thinking"}
         text="CLI Default preserves the native setting. Supported levels depend on the selected model."
       />
       <Form.Dropdown
         id="reasoning"
-        title={provider === "codex" ? "Reasoning Effort" : "Thinking Level"}
-        value={provider === "codex" ? draft.effort : draft.thinkingLevel}
+        title={provider !== "pi" ? "Reasoning Effort" : "Thinking Level"}
+        value={provider !== "pi" ? draft.effort : draft.thinkingLevel}
         onChange={(value) =>
-          provider === "codex"
+          provider !== "pi"
             ? set("effort", value as Effort | "")
             : set("thinkingLevel", value as Effort | "")
         }
@@ -610,14 +621,8 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
               <Form.Dropdown.Item key={value} value={value} title={title} />
             ))}
           </Form.Dropdown>
-          <Form.Checkbox
-            id="webSearch"
-            label="Enable web search by default"
-            value={draft.webSearch}
-            onChange={(value) => set("webSearch", value)}
-          />
         </>
-      ) : (
+      ) : provider === "pi" ? (
         <Form.TextArea
           id="thinkingByModel"
           title="Thinking by Model"
@@ -625,12 +630,31 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           value={draft.thinkingByModelText}
           onChange={(value) => set("thinkingByModelText", value)}
         />
-      )}
+      ) : null}
+      <Form.Separator />
+      <Form.Description
+        title="Tool Access"
+        text="Allow all tools lets this agent run commands, edit files and use configured MCP, plugins and extensions directly, without command review. Overrides Tools and Web Search for every request, including existing chats."
+      />
+      {provider !== "pi" ? (
+        <Form.Checkbox
+          id="webSearch"
+          label="Enable web search by default"
+          value={draft.webSearch}
+          onChange={(value) => set("webSearch", value)}
+        />
+      ) : null}
       <Form.Checkbox
         id="tools"
         label="Enable read-only file tools and reviewed shell commands by default"
         value={draft.tools}
         onChange={(value) => set("tools", value)}
+      />
+      <Form.Checkbox
+        id="allowAllTools"
+        label="Allow all tools"
+        value={draft.allowAllTools}
+        onChange={(value) => set("allowAllTools", value)}
       />
       <Form.Separator />
       <Form.Description
@@ -645,7 +669,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         placeholder={
           provider === "codex"
             ? "HTTPS_PROXY=http://127.0.0.1:7890"
-            : "PI_CODING_AGENT_DIR=/path/to/pi/agent"
+            : provider === "claude"
+              ? "ANTHROPIC_BASE_URL=https://your-gateway.example"
+              : "PI_CODING_AGENT_DIR=/path/to/pi/agent"
         }
       />
     </Form>

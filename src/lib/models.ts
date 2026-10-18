@@ -2,10 +2,8 @@ import { environment } from "@raycast/api";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CODEX_DEFAULT,
-  CODEX_PREFIX,
-  PI_DEFAULT,
-  PI_PREFIX,
+  PROVIDERS,
+  nativeDefault,
   Provider,
   isSupportedModel,
   providerOf,
@@ -37,7 +35,7 @@ export interface ModelCatalog {
 }
 
 export function isNativeDefault(model: string): boolean {
-  return model === CODEX_DEFAULT || model === PI_DEFAULT;
+  return isSupportedModel(model) && model === nativeDefault(providerOf(model));
 }
 
 function supportFile(name: string): string {
@@ -74,8 +72,7 @@ export function currentModel(
   const visible = visibleProviderModels(provider);
   return visible.some((m) => sameModel(m.value, settings.defaultModel))
     ? settings.defaultModel
-    : (visible[0]?.value ??
-        (provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT));
+    : (visible[0]?.value ?? nativeDefault(provider));
 }
 
 export function setCurrentModel(model: string): void {
@@ -128,34 +125,35 @@ export function sameModel(a: string, b: string): boolean {
 
 export function modelLabel(model: string): string {
   if (!isSupportedModel(model)) return model;
+  const original = model;
   model = resolvedModel(model);
   const provider = providerOf(model);
-  const alias = getProviderSettings(provider).modelAliases[model];
+  const aliases = getProviderSettings(provider).modelAliases;
+  const alias = aliases[original] || aliases[model];
   const name =
     alias ||
-    (isNativeDefault(model)
-      ? "CLI default"
-      : model.slice(
-          provider === "codex" ? CODEX_PREFIX.length : PI_PREFIX.length,
-        ));
+    (isNativeDefault(model) ? "CLI default" : model.slice(provider.length + 1));
   return `${provider}: ${name}`;
 }
 
 export function browserModels(provider: Provider): ModelOption[] {
   const catalog = loadCatalog();
   if (
-    provider === "pi" &&
-    catalog?.providerFingerprints.pi !== providerFingerprint("pi")
+    provider !== "codex" &&
+    catalog?.providerFingerprints[provider] !== providerFingerprint(provider)
   )
     return [];
   const list = (catalog?.models ?? []).filter(
     (m) => providerOf(m.value) === provider && !isNativeDefault(m.value),
   );
-  // Codex accepts custom IDs without a catalog endpoint. Pi models must be
+  // Codex and Claude accept custom IDs. Pi models must be
   // returned by its native authenticated discovery, even when entered manually.
-  if (provider === "codex") {
+  if (provider !== "pi") {
     for (const value of getProviderSettings(provider).customModels) {
-      if (!list.some((m) => m.value === value))
+      if (
+        !isNativeDefault(value) &&
+        !list.some((m) => sameModel(m.value, value))
+      )
         list.push({ value, title: modelLabel(value) });
     }
   }
@@ -177,7 +175,7 @@ export function setVisibleModels(provider: Provider, ids: string[]): void {
   const defaultModel =
     selected[0] && sameModel(selected[0], current)
       ? current
-      : (selected[0] ?? (provider === "codex" ? CODEX_DEFAULT : PI_DEFAULT));
+      : (selected[0] ?? nativeDefault(provider));
   updateProviderSettings(provider, { visibleModels: selected, defaultModel });
 }
 
@@ -195,16 +193,14 @@ export function groupByProvider(
   models: ModelOption[],
   preferred?: string,
 ): { provider: Provider; models: ModelOption[] }[] {
-  return (["codex", "pi"] as Provider[])
-    .map((provider) => ({
-      provider,
-      models: models
-        .filter((m) => providerOf(m.value) === provider)
-        .sort(
-          (a, b) =>
-            Number(b.value === preferred) - Number(a.value === preferred),
-        ),
-    }))
+  return PROVIDERS.map((provider) => ({
+    provider,
+    models: models
+      .filter((m) => providerOf(m.value) === provider)
+      .sort(
+        (a, b) => Number(b.value === preferred) - Number(a.value === preferred),
+      ),
+  }))
     .filter((g) => g.models.length > 0)
     .sort(
       (a, b) =>

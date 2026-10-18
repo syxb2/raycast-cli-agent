@@ -128,10 +128,10 @@ export function AnswerView(props: AnswerViewProps) {
         !stream.isLoading ? (
           <Detail.Metadata>
             <Detail.Metadata.Label title="Model" text={modelLabel(model)} />
-            {optionBadges(options).length ? (
+            {optionBadges(options, model).length ? (
               <Detail.Metadata.Label
                 title="Options"
-                text={optionBadges(options).join(" · ")}
+                text={optionBadges(options, model).join(" · ")}
               />
             ) : null}
             {stream.durationMs ? (

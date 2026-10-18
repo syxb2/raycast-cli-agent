@@ -197,12 +197,27 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       if (prompt === "crash") {
         process.exit(2);
       }
-      if (prompt === "approve")
+      if (prompt === "approve") {
         send({
           id: "approval",
           method: "item/commandExecution/requestApproval",
           params: { threadId, turnId, command: "touch reviewed.txt" },
         });
+        send({
+          id: "file-approval",
+          method: "item/fileChange/requestApproval",
+          params: { threadId, turnId },
+        });
+        send({
+          id: "permissions-approval",
+          method: "item/permissions/requestApproval",
+          params: {
+            threadId,
+            turnId,
+            permissions: { network: { enabled: true }, fileSystem: null },
+          },
+        });
+      }
       codexFinish(
         threadId,
         turnId,

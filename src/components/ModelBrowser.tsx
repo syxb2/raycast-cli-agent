@@ -52,7 +52,7 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
     void refresh();
   }, [provider]);
   const vendorOf = (id: string) =>
-    provider === "pi" ? id.slice(3).split("/")[0] : "codex";
+    provider === "pi" ? id.slice(3).split("/")[0] : provider;
   const vendors = [...new Set(models.map((m) => vendorOf(m.value)))].sort();
   const filtered = models.filter(
     (m) => filter === "all" || vendorOf(m.value) === filter,
@@ -76,7 +76,7 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
   return (
     <List
       navigationTitle={`${PROVIDER_NAMES[provider]} Model Browser`}
-      searchBarPlaceholder="Search authenticated models"
+      searchBarPlaceholder="Search models"
       isLoading={busy}
       searchBarAccessory={
         <List.Dropdown
@@ -103,10 +103,10 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
       {!filtered.length ? (
         <List.EmptyView
           icon={Icon.MagnifyingGlass}
-          title={busy ? "Checking Models…" : "No Authenticated Models"}
+          title={busy ? "Checking Models…" : "No Models"}
           description={
             error ||
-            "Configure authentication in the CLI, then refresh. Models are shown only after native discovery and authentication checks."
+            "Configure authentication in the CLI, then refresh. Models come from the CLI; Pi also checks provider authentication."
           }
         />
       ) : null}

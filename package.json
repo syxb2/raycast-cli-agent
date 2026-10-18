@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "raycast-cli-agent",
   "title": "Cli Agent",
-  "description": "Ask, chat, translate and rewrite selected text using your locally configured Codex or Pi Agent CLI.",
+  "description": "Ask, chat, translate and rewrite selected text using your locally configured Codex, Pi Agent or Claude Code CLI.",
   "icon": "extension-icon-red.png",
   "author": "Carol White",
   "categories": [
@@ -59,7 +59,7 @@
       "name": "ask-files",
       "title": "Ask About Finder Selection",
       "subtitle": "Cli Agent",
-      "description": "Ask a question about the files or folders selected in Finder. The model can read them, nothing else.",
+      "description": "Ask a question about the files or folders selected in Finder.",
       "mode": "view",
       "arguments": [
         {
@@ -123,7 +123,7 @@
       "name": "settings",
       "title": "Settings",
       "subtitle": "Cli Agent",
-      "description": "Configure General settings and independent Codex and Pi Agent providers.",
+      "description": "Configure General settings and independent Codex, Pi Agent and Claude Code providers.",
       "mode": "view"
     }
   ],
