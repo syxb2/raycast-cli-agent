@@ -47,6 +47,14 @@ export interface GeneralSettings {
   extraInstructions: string;
 }
 
+export const TOOL_ACCESS_LEVELS = ["none", "read-only", "all"] as const;
+export type ToolAccess = (typeof TOOL_ACCESS_LEVELS)[number];
+export const TOOL_ACCESS_OPTIONS: { value: ToolAccess; title: string }[] = [
+  { value: "none", title: "No Tools" },
+  { value: "read-only", title: "Read-only Tools" },
+  { value: "all", title: "All Tools" },
+];
+
 export interface ProviderSettings {
   enabled: boolean;
   cliPath: string;
@@ -56,8 +64,7 @@ export interface ProviderSettings {
   customModels: string[];
   visibleModels: string[] | null;
   modelAliases: Record<string, string>;
-  tools: boolean;
-  allowAllTools: boolean;
+  toolAccess: ToolAccess;
 }
 
 export interface CodexSettings extends ProviderSettings {
@@ -107,8 +114,7 @@ export function defaultSettings(): Settings {
     customModels: [],
     visibleModels: null,
     modelAliases: {},
-    tools: false,
-    allowAllTools: false,
+    toolAccess: "none",
   });
   return {
     version: 1,
@@ -193,7 +199,8 @@ function importLegacySettings(): Settings {
   settings.providers.pi.configDir = text("piAgentDir");
   settings.providers.codex.webSearch = legacy.webSearch === true;
   for (const provider of ["codex", "pi"] as const)
-    settings.providers[provider].tools = legacy.chatTools === true;
+    settings.providers[provider].toolAccess =
+      legacy.chatTools === true ? "read-only" : "none";
   const effort = text("effort") as Effort;
   if (CODEX_EFFORTS.includes(effort)) settings.providers.codex.effort = effort;
   if (PI_THINKING_LEVELS.includes(effort))
@@ -209,6 +216,24 @@ function importLegacySettings(): Settings {
   return settings;
 }
 
+function migrateProviderSettings<T extends ProviderSettings>(
+  defaults: T,
+  stored: Partial<T> & { tools?: boolean; allowAllTools?: boolean } = {},
+): T {
+  const { tools, allowAllTools, ...current } = stored;
+  const toolAccess =
+    current.toolAccess !== undefined
+      ? current.toolAccess
+      : allowAllTools === true
+        ? "all"
+        : tools === true
+          ? "read-only"
+          : "none";
+  if (!TOOL_ACCESS_LEVELS.includes(toolAccess))
+    throw new Error("Invalid tool access level.");
+  return { ...defaults, ...current, toolAccess };
+}
+
 export function getSettings(): Settings {
   const file = settingsFile();
   if (!existsSync(file)) return importLegacySettings();
@@ -219,9 +244,15 @@ export function getSettings(): Settings {
     version: 1,
     general: { ...defaults.general, ...stored.general },
     providers: {
-      codex: { ...defaults.providers.codex, ...stored.providers?.codex },
-      pi: { ...defaults.providers.pi, ...stored.providers?.pi },
-      claude: { ...defaults.providers.claude, ...stored.providers?.claude },
+      codex: migrateProviderSettings(
+        defaults.providers.codex,
+        stored.providers?.codex,
+      ),
+      pi: migrateProviderSettings(defaults.providers.pi, stored.providers?.pi),
+      claude: migrateProviderSettings(
+        defaults.providers.claude,
+        stored.providers?.claude,
+      ),
     },
   };
 }
@@ -285,6 +316,8 @@ function validateSettings(settings: Settings): void {
   }
   for (const provider of PROVIDERS) {
     const value = settings.providers[provider];
+    if (!TOOL_ACCESS_LEVELS.includes(value.toolAccess))
+      throw new Error("Invalid tool access level.");
     value.cliPath = value.cliPath.trim();
     value.configDir = value.configDir.trim();
     value.defaultModel = normalizeProviderModel(provider, value.defaultModel);

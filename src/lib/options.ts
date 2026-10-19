@@ -28,30 +28,24 @@ export function effortsForProvider(
   }));
 }
 
-// What a request may use beyond plain text. Everything is off by default:
-// each one makes answers slower and requests bigger.
+// Per-request options. Tool permissions are always read from the agent settings.
 export interface RequestOptions {
   webSearch?: boolean;
   effort?: Effort;
-  // Read files anywhere in the home folder and propose shell commands, which
-  // run only after the user approves them.
-  tools?: boolean;
-  // Folders that may be read (Finder selection), without shell commands.
+  // Finder context does not grant tools when the agent disables them.
   readDirs?: string[];
 }
 
 export function defaultOptions(model = currentModel()): RequestOptions {
   const provider = providerOf(model);
-  const settings = getProviderSettings(provider);
   return {
     webSearch:
       provider === "codex"
-        ? getProviderSettings("codex").webSearch || undefined
+        ? getProviderSettings("codex").webSearch
         : provider === "claude"
-          ? getProviderSettings("claude").webSearch || undefined
+          ? getProviderSettings("claude").webSearch
           : undefined,
     // Leave reasoning unset so the backend can resolve provider/model defaults.
-    tools: settings.tools || undefined,
   };
 }
 
@@ -68,12 +62,15 @@ export function optionBadges(
   model?: string,
 ): string[] {
   const badges: string[] = [];
-  if (model && getProviderSettings(providerOf(model)).allowAllTools)
-    badges.push("All Tools");
-  else {
-    if (o?.webSearch) badges.push("Web");
-    if (o?.tools) badges.push("Tools");
-  }
+  const settings = model ? getProviderSettings(providerOf(model)) : undefined;
+  if (
+    o?.webSearch ??
+    (settings && "webSearch" in settings ? settings.webSearch : false)
+  )
+    badges.push("Web");
+  const access = settings?.toolAccess ?? "none";
+  if (access === "all") badges.push("All Tools");
+  else if (access === "read-only") badges.push("Read-only Tools");
   if (o?.effort) badges.push(effortTitle(o.effort));
   return badges;
 }
@@ -84,7 +81,7 @@ export function optionsForModel(
 ): RequestOptions {
   const provider = providerOf(model);
   return {
-    ...options,
+    readDirs: options.readDirs,
     webSearch: provider === "pi" ? undefined : options.webSearch,
     effort: effortsForProvider(provider).some((e) => e.value === options.effort)
       ? options.effort

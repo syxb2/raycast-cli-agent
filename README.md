@@ -120,22 +120,23 @@ On an answer: paste to the active app, copy, continue in Chat, regenerate, ask a
 
 | Option | Behavior |
 | --- | --- |
-| Web Search | Codex's native search or Claude Code's WebSearch/WebFetch; available for Codex and Claude Code. |
-| Tools | Read files and propose shell commands for review. |
-| Allow all tools | Independent setting for each agent, off by default. Allows direct command execution, file edits and native configured integrations; takes precedence over Tools and Web Search for every request, including existing chats. |
+| Web Search | Independent checkbox for Codex's native search or Claude Code's WebSearch/WebFetch. Available in every tool permission mode; All Tools does not enable it automatically. |
+| Tool Permissions | One selection per agent: No Tools, Read-only Tools or All Tools. New installations default to No Tools. Existing settings migrate to the matching permission. The current selection applies to every new request, including existing chats. |
 | Reasoning Effort | Override Codex/Claude effort or Pi thinking level; support depends on the selected model. Choose Provider Default to inherit the provider and model settings. |
 | Extra Instructions | Added to every request, including translation and rewriting. |
 | Extra Models | Configured per provider; model IDs may omit that provider's `codex:`, `pi:` or `claude:` prefix. |
 
-With Allow all tools off, Codex runs in a read-only sandbox and native approval requests are denied. Shell tools are disabled when file access is unnecessary. Pi exposes only `read,grep,find,ls` for file requests and disables its tools for plain text tasks. Extensions, MCP and plugin tools are disabled for these requests; this restriction does not replace model, provider or authentication settings.
+**No Tools** disables local CLI tools and configured integrations. Finder context and saved chat options cannot grant tool access. Web search remains independently available on Codex and Claude when its checkbox is enabled.
 
-With Allow all tools off, Claude exposes only Read/Glob/Grep for file access and WebSearch/WebFetch when web search is enabled. Bash, editing, subagent and MCP tools are disabled, hooks and slash commands are disabled for the invocation, and native permission requests are denied. These invocation options leave authentication and the native model/provider configuration in place. Finder paths are added as read context; Claude uses a stable extension workspace so changing those paths does not change the native session location.
+**Read-only Tools** enables Codex's shell tools within its read-only sandbox, Claude's Read/Glob/Grep, or Pi's read/grep/find/ls. Native mutations and configured MCP, plugin and extension tools remain disabled. Claude's invocation also disables hooks and slash commands in this mode.
 
-With Allow all tools on, Codex uses full access without approval prompts and enables shell, patch, multi-agent, app, plugin and web-search tools while retaining native MCP configuration. Claude uses all built-in tools with permission checks bypassed and loads its native configured MCP, plugins, hooks and skills. Pi enables all discovered tools, including bash/edit/write and configured extension/MCP tools. Native disabled integrations and external account or administrator restrictions still apply. Model discovery remains restricted and never receives full tool access.
+**All Tools** enables direct commands, file edits and native configured integrations without application command review. Codex uses full access and retains native MCP configuration; Claude bypasses native permission checks and loads configured MCP, plugins, hooks and skills; Pi enables all discovered tools. Web search still follows its own setting: Codex passes an explicit live/disabled value, and Claude excludes WebSearch/WebFetch when disabled. Native disabled integrations and external account or administrator restrictions still apply. Model discovery remains restricted and never receives full tool access.
 
-In restricted mode, mutation commands are displayed for review. Once approved, the extension runs the exact command in a local login shell and returns its output to the conversation. Those approved commands execute outside the CLI's read-only restrictions. Commands have a 120-second timeout and at most 20,000 output characters are returned to the model. Direct tool execution with Allow all tools on uses the native CLI's execution behavior instead.
+Settings and the chat's Tool Permissions submenu update the same agent permission. Changing agents never imports another agent's permission; queued requests resolve the current setting when they start. Web search and reasoning can still be overridden for an individual chat or answer.
 
-Finder selection supplies context and a working directory, not an exact-file access boundary. File tools may read additional files accessible to the CLI. The extension does not implement its own PDF or document parser.
+In Read-only Tools mode, mutation commands may be proposed for manual review. Once approved, the extension runs the exact command in a local login shell and returns its output to the conversation. Those explicit user-approved actions execute outside the CLI's read-only restrictions. Commands have a 120-second timeout and at most 20,000 output characters are returned to the model.
+
+Finder selection supplies context and a working directory when tools are permitted, not an exact-file access boundary. File tools may read additional files accessible to the CLI. The extension does not implement its own PDF or document parser.
 
 ## Local sessions
 

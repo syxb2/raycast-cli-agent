@@ -61,8 +61,7 @@ async function launchPi(opts?: RunOptions): Promise<{
     if (thinking) args.push("--thinking", thinking);
   }
   if (opts?.allowAllTools) args.push("--tools", "*");
-  else if (opts?.tools || opts?.readDirs?.length)
-    args.push("--tools", "read,grep,find,ls");
+  else if (opts?.tools) args.push("--tools", "read,grep,find,ls");
   else args.push("--no-tools");
   if (!opts?.sessionId) args.push("--no-session");
   else {
@@ -156,7 +155,7 @@ export async function runPi(opts: RunOptions): Promise<RunResult> {
   };
   try {
     opts.signal?.throwIfAborted();
-    if (opts.webSearch && !opts.allowAllTools)
+    if (opts.webSearch)
       throw new Error(
         "Pi has no built-in web search in this extension. Disable Web Search or select Codex.",
       );

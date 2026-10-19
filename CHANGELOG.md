@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Replace each agent's overlapping tool checkboxes with one No Tools / Read-only Tools / All Tools selection in Settings and chat options; migrate existing permissions and enforce the current agent selection for every request
+- Keep web search independent in every tool permission mode, including full access; prevent Finder context and saved chat options from elevating agent permissions
 - Coordinate model discovery per provider and runtime so forced refreshes reach the CLI and overlapping full/provider refreshes cannot overwrite newer catalogs
 - Keep independent provider freshness and errors, retry only stale or failed providers, and publish completed provider catalogs to open model menus immediately
 - Reuse fresh catalogs when reopening Model Browser or returning from Settings; retain explicit forced refresh actions

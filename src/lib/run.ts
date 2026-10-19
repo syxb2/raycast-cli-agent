@@ -18,10 +18,20 @@ export async function runModel(opts: RunOptions): Promise<RunResult> {
       );
     return await serializeSession(opts.sessionId, () => {
       claimSessionProvider(opts.sessionId, provider);
+      const current = getProviderSettings(provider);
+      if (!current.enabled)
+        throw new Error(
+          `${provider} is disabled. Enable it in Cli Agent Settings.`,
+        );
       const request = {
         ...opts,
         model,
-        allowAllTools: getProviderSettings(provider).allowAllTools,
+        tools: current.toolAccess !== "none",
+        allowAllTools: current.toolAccess === "all",
+        readDirs: current.toolAccess === "none" ? undefined : opts.readDirs,
+        webSearch:
+          opts.webSearch ??
+          ("webSearch" in current ? current.webSearch : false),
       };
       return provider === "codex"
         ? runCodex(request)

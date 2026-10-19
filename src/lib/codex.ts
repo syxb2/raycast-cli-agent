@@ -195,11 +195,9 @@ export async function runCodex(opts: RunOptions): Promise<RunResult> {
     const native = loadNativeSession(opts.sessionId, "codex", configDir);
     const providerSettings = getProviderSettings("codex");
     const allowAllTools = Boolean(opts.allowAllTools);
-    const readable = Boolean(
-      allowAllTools || opts.tools || opts.readDirs?.length,
-    );
+    const readable = Boolean(allowAllTools || opts.tools);
     const overrides: RecordValue = {
-      web_search: allowAllTools || opts.webSearch ? "live" : "disabled",
+      web_search: opts.webSearch ? "live" : "disabled",
       "features.shell_tool": readable,
       "features.unified_exec": readable,
       "features.apply_patch": allowAllTools,

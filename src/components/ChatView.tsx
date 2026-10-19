@@ -400,7 +400,6 @@ export function ChatView({
             model={conversation.model}
             options={conversation.options ?? {}}
             onChange={changeOptions}
-            showTools
           />
         </ActionPanel>
       }
@@ -495,7 +494,6 @@ export function ChatView({
                     model={conversation.model}
                     options={conversation.options ?? {}}
                     onChange={changeOptions}
-                    showTools
                   />
                 </ActionPanel>
               }

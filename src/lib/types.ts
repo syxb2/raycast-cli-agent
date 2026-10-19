@@ -11,6 +11,7 @@ export interface RunOptions extends RequestOptions {
   // Resolved from this provider's current settings for every request; never
   // stored in conversation options or inherited from another provider.
   allowAllTools?: boolean;
+  tools?: boolean;
   prompt: string;
   model?: string;
   systemPrompt?: string;

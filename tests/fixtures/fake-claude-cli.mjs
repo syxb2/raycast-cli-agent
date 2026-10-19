@@ -90,6 +90,16 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   }
   if (prompt === "crash") process.exit(2);
   if (prompt === "slow") return;
+  if (prompt === "web-search" || prompt === "web-fetch")
+    send({
+      type: "control_request",
+      request_id: "web-permission",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: prompt === "web-search" ? "WebSearch" : "WebFetch",
+        input: { query: "fixture" },
+      },
+    });
   if (prompt === "approve")
     send({
       type: "control_request",

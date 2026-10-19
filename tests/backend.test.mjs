@@ -279,45 +279,84 @@ test("cancelling a Codex turn interrupts only that thread and keeps the shared s
 });
 
 test("native and proposed shell commands wait for UI approval", async () => {
-  const codex = await backend.runModel({
-    model: "codex:default",
-    prompt: "approve",
-    tools: true,
-  });
-  assert.deepEqual(codex.commands, ["touch reviewed.txt"]);
-  await until(() =>
-    events().some(
-      (e) =>
-        e.record?.id === "approval" && e.record?.result?.decision === "decline",
-    ),
-  );
-  const pi = await backend.runModel({
-    model: "pi:default",
-    prompt: "approve",
-    tools: true,
-  });
-  assert.deepEqual(pi.commands, ["touch reviewed.txt"]);
-  assert.equal(pi.text, "Review this.");
-  const launch = events()
-    .filter((e) => e.provider === "pi" && e.event === "launch")
-    .at(-1);
-  assert.equal(
-    launch.args[launch.args.indexOf("--tools") + 1],
-    "read,grep,find,ls",
-  );
-  assert.ok(launch.args.includes("--no-mcp"));
+  const codexSettings = backend.getProviderSettings("codex");
+  const piSettings = backend.getProviderSettings("pi");
+  try {
+    backend.updateProviderSettings("codex", { toolAccess: "read-only" });
+    backend.updateProviderSettings("pi", { toolAccess: "read-only" });
+    const codex = await backend.runModel({
+      model: "codex:default",
+      prompt: "approve",
+      tools: true,
+    });
+    assert.deepEqual(codex.commands, ["touch reviewed.txt"]);
+    await until(() =>
+      events().some(
+        (e) =>
+          e.record?.id === "approval" &&
+          e.record?.result?.decision === "decline",
+      ),
+    );
+    const pi = await backend.runModel({
+      model: "pi:default",
+      prompt: "approve",
+      tools: true,
+    });
+    assert.deepEqual(pi.commands, ["touch reviewed.txt"]);
+    assert.equal(pi.text, "Review this.");
+    const launch = events()
+      .filter((e) => e.provider === "pi" && e.event === "launch")
+      .at(-1);
+    assert.equal(
+      launch.args[launch.args.indexOf("--tools") + 1],
+      "read,grep,find,ls",
+    );
+    assert.ok(launch.args.includes("--no-mcp"));
+  } finally {
+    backend.updateProviderSettings("codex", codexSettings);
+    backend.updateProviderSettings("pi", piSettings);
+  }
 });
 
-test("older settings default all tool access to off for every agent", () => {
+test("legacy tool settings migrate to one validated permission per agent", () => {
   const file = join(dir, "support", "settings.json");
   const original = readFileSync(file, "utf8");
   try {
-    const stored = JSON.parse(original);
-    for (const provider of ["codex", "pi", "claude"])
+    for (const provider of ["codex", "pi", "claude"]) {
+      for (const [tools, allowAllTools, expected] of [
+        [false, false, "none"],
+        [true, false, "read-only"],
+        [false, true, "all"],
+        [true, true, "all"],
+      ]) {
+        const stored = JSON.parse(original);
+        delete stored.providers[provider].toolAccess;
+        Object.assign(stored.providers[provider], { tools, allowAllTools });
+        writeFileSync(file, JSON.stringify(stored));
+        assert.equal(
+          backend.getProviderSettings(provider).toolAccess,
+          expected,
+        );
+        backend.updateProviderSettings(provider, { toolAccess: expected });
+        const migrated = JSON.parse(readFileSync(file, "utf8")).providers[
+          provider
+        ];
+        assert.equal(migrated.tools, undefined);
+        assert.equal(migrated.allowAllTools, undefined);
+      }
+      const stored = JSON.parse(original);
+      delete stored.providers[provider].toolAccess;
+      delete stored.providers[provider].tools;
       delete stored.providers[provider].allowAllTools;
-    writeFileSync(file, JSON.stringify(stored));
-    for (const provider of ["codex", "pi", "claude"])
-      assert.equal(backend.getProviderSettings(provider).allowAllTools, false);
+      writeFileSync(file, JSON.stringify(stored));
+      assert.equal(backend.getProviderSettings(provider).toolAccess, "none");
+      assert.throws(
+        () =>
+          backend.updateProviderSettings(provider, { toolAccess: "invalid" }),
+        /tool access/,
+      );
+      assert.equal(backend.getProviderSettings(provider).toolAccess, "none");
+    }
   } finally {
     writeFileSync(file, original);
   }
@@ -340,7 +379,7 @@ for (const provider of ["codex", "pi", "claude"]) {
         enabled: true,
         cliPath: { codex: codexPath, pi: piPath, claude: claudePath }[provider],
         configDir,
-        allowAllTools: false,
+        toolAccess: "none",
       });
       const first = await backend.runModel({
         model,
@@ -350,11 +389,11 @@ for (const provider of ["codex", "pi", "claude"]) {
       assert.equal(first.isError, false, first.error?.message);
       const native = backend.loadNativeSession(sessionId, provider, configDir);
 
-      backend.updateProviderSettings(provider, { allowAllTools: true });
+      backend.updateProviderSettings(provider, { toolAccess: "all" });
       for (const other of ["codex", "pi", "claude"].filter(
         (p) => p !== provider,
       ))
-        assert.equal(backend.getProviderSettings(other).allowAllTools, false);
+        assert.equal(backend.getProviderSettings(other).toolAccess, "none");
       assert.deepEqual(
         backend.optionBadges({ tools: false, webSearch: false }, model),
         ["All Tools"],
@@ -378,7 +417,7 @@ for (const provider of ["codex", "pi", "claude"]) {
         const params = requests("thread/resume").at(-1).record.params;
         assert.equal(params.sandbox, "danger-full-access");
         assert.equal(params.approvalPolicy, "never");
-        assert.equal(params.config.web_search, "live");
+        assert.equal(params.config.web_search, "disabled");
         for (const feature of [
           "shell_tool",
           "unified_exec",
@@ -430,7 +469,7 @@ for (const provider of ["codex", "pi", "claude"]) {
         });
 
         // Another restricted request cannot inherit the full-access server.
-        backend.updateProviderSettings(provider, { allowAllTools: false });
+        backend.updateProviderSettings(provider, { toolAccess: "none" });
         const restricted = await backend.runModel({
           model,
           prompt: "isolated",
@@ -452,13 +491,16 @@ for (const provider of ["codex", "pi", "claude"]) {
         );
         for (const flag of [
           "--allowedTools",
-          "--disallowedTools",
           "--strict-mcp-config",
           "--mcp-config",
           "--settings",
           "--disable-slash-commands",
         ])
           assert.ok(!launch.args.includes(flag));
+        assert.equal(
+          launch.args[launch.args.indexOf("--disallowedTools") + 1],
+          "WebSearch,WebFetch",
+        );
         assert.equal(
           launch.args[launch.args.indexOf("--system-prompt-snapshot") + 1],
           "off",
@@ -511,7 +553,7 @@ for (const provider of ["codex", "pi", "claude"]) {
         );
       }
 
-      backend.updateProviderSettings(provider, { allowAllTools: false });
+      backend.updateProviderSettings(provider, { toolAccess: "read-only" });
       const revertedStart = events().length;
       const reverted = await backend.runModel({
         model,
@@ -523,7 +565,9 @@ for (const provider of ["codex", "pi", "claude"]) {
       });
       assert.equal(reverted.isError, false, reverted.error?.message);
       assert.deepEqual(reverted.commands, ["touch reviewed.txt"]);
-      assert.deepEqual(backend.optionBadges({ tools: true }, model), ["Tools"]);
+      assert.deepEqual(backend.optionBadges({ tools: true }, model), [
+        "Read-only Tools",
+      ]);
       assert.equal(
         backend.loadNativeSession(sessionId, provider, configDir).id,
         native.id,
@@ -698,8 +742,11 @@ test("new chats offer Pi models and keep the selected agent after sending", asyn
   const pi = backend.getProviderSettings("pi");
   let saved;
   try {
-    backend.updateProviderSettings("codex", { webSearch: true, tools: false });
-    backend.updateProviderSettings("pi", { tools: true });
+    backend.updateProviderSettings("codex", {
+      webSearch: true,
+      toolAccess: "none",
+    });
+    backend.updateProviderSettings("pi", { toolAccess: "read-only" });
     const draft = backend.newConversation(
       "codex:default",
       backend.defaultOptions("codex:default"),
@@ -717,7 +764,8 @@ test("new chats offer Pi models and keep the selected agent after sending", asyn
     assert.notEqual(selected.id, draft.id);
     assert.notEqual(selected.sessionId, draft.sessionId);
     assert.equal(selected.options.webSearch, undefined);
-    assert.equal(selected.options.tools, true);
+    assert.equal(selected.options.tools, undefined);
+    assert.equal(backend.getProviderSettings("pi").toolAccess, "read-only");
     assert.equal(selected.messages.length, 0);
     const sameAgent = backend.selectChatModel(
       selected,
@@ -1397,6 +1445,7 @@ test("Claude streams without duplicate final text and resumes the bound native s
       claudeDir,
     );
     assert.ok(native.id);
+    backend.updateProviderSettings("claude", { toolAccess: "read-only" });
     const second = await backend.runModel({
       model: "claude:opus",
       sessionId: "claude-chat",
@@ -1479,6 +1528,7 @@ test("Claude cancellation, crashes, errors and command approval settle safely", 
       cliPath: claudePath,
       configDir: claudeDir,
     });
+    backend.updateProviderSettings("claude", { toolAccess: "read-only" });
     const approval = await backend.runModel({
       model: "claude:default",
       prompt: "approve",
@@ -1677,5 +1727,191 @@ test("full refresh preserves the last complete Codex catalog after an RPC failur
   } finally {
     writeFileSync(file, fixture);
     if (previous) backend.saveCatalog(previous);
+  }
+});
+
+for (const provider of ["codex", "pi", "claude"]) {
+  test(`${provider} enforces all three permission levels and keeps web search independent`, async () => {
+    const original = backend.getProviderSettings(provider);
+    const launchFor = () =>
+      events().findLast((e) => e.provider === provider && e.event === "launch");
+    try {
+      backend.updateProviderSettings(provider, {
+        enabled: true,
+        cliPath: { codex: codexPath, pi: piPath, claude: claudePath }[provider],
+        configDir: { codex: codexDir, pi: piDir, claude: claudeDir }[provider],
+        ...(provider !== "pi" ? { webSearch: true } : {}),
+      });
+      for (const toolAccess of ["none", "read-only", "all", "none"]) {
+        backend.updateProviderSettings(provider, { toolAccess });
+        for (const override of provider === "pi"
+          ? [false]
+          : [undefined, false, true]) {
+          const webSearch = provider !== "pi" && override !== false;
+          const outcome = await backend.runModel({
+            model: `${provider}:default`,
+            sessionId: `permission-matrix-${provider}`,
+            prompt: "permissions",
+            tools: true,
+            allowAllTools: true,
+            readDirs: [dir],
+            ...(override === undefined ? {} : { webSearch: override }),
+          });
+          assert.equal(outcome.isError, false, outcome.error?.message);
+          assert.equal(
+            backend.getProviderSettings(provider).toolAccess,
+            toolAccess,
+          );
+          if (provider === "codex") {
+            const params = events().findLast(
+              (e) =>
+                e.provider === "codex" &&
+                ["thread/start", "thread/resume"].includes(e.record?.method),
+            ).record.params;
+            assert.equal(
+              params.config.web_search,
+              webSearch ? "live" : "disabled",
+            );
+            assert.equal(
+              params.config["features.shell_tool"],
+              toolAccess !== "none",
+            );
+            assert.equal(
+              params.config["features.unified_exec"],
+              toolAccess !== "none",
+            );
+            assert.equal(
+              params.config["features.apply_patch"],
+              toolAccess === "all",
+            );
+            assert.equal(
+              params.sandbox,
+              toolAccess === "all" ? "danger-full-access" : "read-only",
+            );
+            assert.equal(
+              params.cwd,
+              toolAccess === "none" ? join(dir, "support", "workspace") : dir,
+            );
+          } else {
+            const args = launchFor().args;
+            if (provider === "pi") {
+              if (toolAccess === "none") assert.ok(args.includes("--no-tools"));
+              else
+                assert.equal(
+                  args[args.indexOf("--tools") + 1],
+                  toolAccess === "all" ? "*" : "read,grep,find,ls",
+                );
+            } else {
+              const expected =
+                toolAccess === "all"
+                  ? "default"
+                  : [
+                      ...(toolAccess === "read-only"
+                        ? ["Read", "Glob", "Grep"]
+                        : []),
+                      ...(webSearch ? ["WebSearch", "WebFetch"] : []),
+                    ].join(",");
+              assert.equal(args[args.indexOf("--tools") + 1], expected);
+              assert.equal(args.includes("--add-dir"), toolAccess !== "none");
+              if (toolAccess === "all") {
+                if (webSearch) assert.ok(!args.includes("--disallowedTools"));
+                else
+                  assert.equal(
+                    args[args.indexOf("--disallowedTools") + 1],
+                    "WebSearch,WebFetch",
+                  );
+              }
+            }
+          }
+        }
+      }
+      if (provider === "pi") {
+        backend.updateProviderSettings(provider, { toolAccess: "all" });
+        const start = events().length;
+        const unsupported = await backend.runModel({
+          model: "pi:default",
+          prompt: "permissions",
+          webSearch: true,
+        });
+        assert.match(unsupported.error.message, /no built-in web search/);
+        assert.equal(events().length, start);
+      }
+    } finally {
+      backend.updateProviderSettings(provider, original);
+    }
+  });
+}
+
+test("Claude full-access control approvals still enforce the independent web setting", async () => {
+  const previous = backend.getProviderSettings("claude");
+  try {
+    backend.updateProviderSettings("claude", {
+      enabled: true,
+      cliPath: claudePath,
+      configDir: claudeDir,
+      toolAccess: "all",
+    });
+    for (const webSearch of [false, true]) {
+      for (const prompt of ["web-search", "web-fetch"]) {
+        const start = events().length;
+        const result = await backend.runModel({
+          model: "claude:default",
+          prompt,
+          webSearch,
+        });
+        assert.equal(result.isError, false, result.error?.message);
+        await until(() =>
+          events()
+            .slice(start)
+            .some((e) => e.record?.response?.request_id === "web-permission"),
+        );
+        const reply = events()
+          .slice(start)
+          .find((e) => e.record?.response?.request_id === "web-permission");
+        assert.equal(
+          reply.record.response.response.behavior,
+          webSearch ? "allow" : "deny",
+        );
+      }
+    }
+  } finally {
+    backend.updateProviderSettings("claude", previous);
+  }
+});
+
+test("queued requests cannot retain a permission that was revoked before they started", async () => {
+  const previous = backend.getProviderSettings("codex");
+  let release;
+  const id = "queued-permission-revoke";
+  const blocking = backend.serializeSession(
+    id,
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  try {
+    await until(() => typeof release === "function");
+    backend.updateProviderSettings("codex", { toolAccess: "all" });
+    const queued = backend.runModel({
+      model: "codex:default",
+      sessionId: id,
+      prompt: "permissions",
+      tools: true,
+      allowAllTools: true,
+      readDirs: [dir],
+    });
+    backend.updateProviderSettings("codex", { toolAccess: "none" });
+    release();
+    await blocking;
+    const result = await queued;
+    assert.equal(result.isError, false, result.error?.message);
+    const params = requests("thread/start").at(-1).record.params;
+    assert.equal(params.config["features.shell_tool"], false);
+    assert.equal(params.config["features.apply_patch"], false);
+    assert.equal(params.cwd, join(dir, "support", "workspace"));
+  } finally {
+    release?.();
+    backend.updateProviderSettings("codex", previous);
   }
 });

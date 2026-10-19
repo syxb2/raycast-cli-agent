@@ -36,6 +36,8 @@ import {
   Effort,
   GeneralSettings,
   ProviderSettings,
+  TOOL_ACCESS_OPTIONS,
+  ToolAccess,
   defaultSettings,
   getSettings,
   normalizeProviderModel,
@@ -337,8 +339,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         .filter(Boolean),
       visibleModels: value.visibleModels,
       modelAliases: assignments(value.aliasesText),
-      tools: value.tools,
-      allowAllTools: value.allowAllTools,
+      toolAccess: value.toolAccess,
     };
     if (provider === "codex")
       updateProviderSettings("codex", {
@@ -634,28 +635,27 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       <Form.Separator />
       <Form.Description
         title="Tool Access"
-        text="Allow all tools lets this agent run commands, edit files and use configured MCP, plugins and extensions directly, without command review. Overrides Tools and Web Search for every request, including existing chats."
+        text="Choose one tool permission for this agent. It applies to new requests in all chats. Web search is controlled separately. All Tools allows commands, file edits and configured integrations without command review."
       />
+      <Form.Dropdown
+        id="toolAccess"
+        title="Tool Permissions"
+        value={draft.toolAccess}
+        onChange={(value) => set("toolAccess", value as ToolAccess)}
+      >
+        {TOOL_ACCESS_OPTIONS.map(({ value, title }) => (
+          <Form.Dropdown.Item key={value} value={value} title={title} />
+        ))}
+      </Form.Dropdown>
       {provider !== "pi" ? (
         <Form.Checkbox
           id="webSearch"
+          title="Web Search"
           label="Enable web search by default"
           value={draft.webSearch}
           onChange={(value) => set("webSearch", value)}
         />
       ) : null}
-      <Form.Checkbox
-        id="tools"
-        label="Enable read-only file tools and reviewed shell commands by default"
-        value={draft.tools}
-        onChange={(value) => set("tools", value)}
-      />
-      <Form.Checkbox
-        id="allowAllTools"
-        label="Allow all tools"
-        value={draft.allowAllTools}
-        onChange={(value) => set("allowAllTools", value)}
-      />
       <Form.Separator />
       <Form.Description
         title="Environment"

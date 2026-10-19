@@ -14,7 +14,11 @@ import { resolveClaudeBinary } from "../lib/claude";
 import { resolvePiBinary } from "../lib/pi";
 import { SettingsView } from "./SettingsView";
 import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
-import { getProviderSettings } from "../lib/settings";
+import {
+  getProviderSettings,
+  TOOL_ACCESS_OPTIONS,
+  updateProviderSettings,
+} from "../lib/settings";
 
 function loginCommand(provider: Provider | undefined): string {
   if (provider === "codex") {
@@ -130,41 +134,46 @@ export const EFFORT_SHORTCUT: Keyboard.Shortcut = {
   key: "e",
 };
 
-// Web search, tools and effort for the current chat or answer.
+// Web search and effort belong to this request; tool access belongs to its agent.
 export function OptionActions(props: {
   options: RequestOptions;
   onChange: (options: RequestOptions) => void;
-  showTools?: boolean;
   model: string;
 }) {
   const { options, onChange } = props;
-  const allowAllTools = getProviderSettings(
-    providerOf(props.model),
-  ).allowAllTools;
+  const provider = providerOf(props.model);
+  const settings = getProviderSettings(provider);
+  const access = settings.toolAccess;
+  const webSearch =
+    options.webSearch ?? ("webSearch" in settings ? settings.webSearch : false);
   return (
     <ActionPanel.Section title="Options">
-      {providerOf(props.model) !== "pi" && !allowAllTools ? (
+      {provider !== "pi" ? (
         <Action
-          title={options.webSearch ? "Disable Web Search" : "Enable Web Search"}
+          title={webSearch ? "Disable Web Search" : "Enable Web Search"}
           icon={Icon.Globe}
           shortcut={WEB_SEARCH_SHORTCUT}
-          onAction={() =>
-            onChange({ ...options, webSearch: !options.webSearch || undefined })
-          }
+          onAction={() => onChange({ ...options, webSearch: !webSearch })}
         />
       ) : null}
-      {props.showTools && !allowAllTools ? (
-        <Action
-          title={
-            options.tools ? "Disable Tools" : "Enable Tools (Files and Shell)"
-          }
-          icon={Icon.Hammer}
-          shortcut={TOOLS_SHORTCUT}
-          onAction={() =>
-            onChange({ ...options, tools: !options.tools || undefined })
-          }
-        />
-      ) : null}
+      <ActionPanel.Submenu
+        title="Tool Permissions"
+        icon={Icon.Hammer}
+        shortcut={TOOLS_SHORTCUT}
+      >
+        {TOOL_ACCESS_OPTIONS.map(({ value, title }) => (
+          <Action
+            key={value}
+            title={title}
+            icon={access === value ? Icon.Checkmark : Icon.Circle}
+            onAction={() => {
+              if (value === access) return;
+              updateProviderSettings(provider, { toolAccess: value });
+              onChange({ ...options });
+            }}
+          />
+        ))}
+      </ActionPanel.Submenu>
       <ActionPanel.Submenu
         title="Reasoning Effort"
         icon={Icon.LightBulb}

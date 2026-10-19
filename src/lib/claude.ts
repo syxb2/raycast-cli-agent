@@ -50,7 +50,7 @@ async function launchClaude(opts?: RunOptions) {
   const sessionId = native?.id ?? randomUUID();
   const allowAllTools = Boolean(opts?.allowAllTools);
   const tools = [
-    ...(opts?.tools || opts?.readDirs?.length ? ["Read", "Glob", "Grep"] : []),
+    ...(opts?.tools ? ["Read", "Glob", "Grep"] : []),
     ...(opts?.webSearch ? ["WebSearch", "WebFetch"] : []),
   ];
   const args = [
@@ -68,8 +68,10 @@ async function launchClaude(opts?: RunOptions) {
     "--setting-sources",
     "user",
   ];
-  if (allowAllTools) args.push("--tools", "default");
-  else {
+  if (allowAllTools) {
+    args.push("--tools", "default");
+    if (!opts?.webSearch) args.push("--disallowedTools", "WebSearch,WebFetch");
+  } else {
     args.push(
       "--settings",
       JSON.stringify({ disableAllHooks: true }),
@@ -122,7 +124,9 @@ async function launchClaude(opts?: RunOptions) {
               subtype: "success",
               request_id: record.request_id,
               response: {
-                ...(allowAllTools
+                ...(allowAllTools &&
+                (opts?.webSearch ||
+                  !["WebSearch", "WebFetch"].includes(record.request.tool_name))
                   ? {
                       behavior: "allow",
                       updatedInput: record.request.input ?? {},

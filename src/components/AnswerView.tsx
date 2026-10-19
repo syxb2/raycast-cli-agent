@@ -17,12 +17,7 @@ import {
 } from "../lib/models";
 import { useModels } from "../lib/modelCatalog";
 import { providerOf } from "../lib/provider";
-import {
-  defaultOptions,
-  optionBadges,
-  optionsForModel,
-  RequestOptions,
-} from "../lib/options";
+import { optionBadges, optionsForModel, RequestOptions } from "../lib/options";
 import { newConversation, saveConversation, titleFrom } from "../lib/storage";
 import { useModelStream } from "../lib/useModelStream";
 import { useLoadingIndicator } from "../lib/useLoadingIndicator";
@@ -91,10 +86,7 @@ export function AnswerView(props: AnswerViewProps) {
   // An approved command continues in Chat, which runs it and keeps going.
   const continueInChat = async (command?: string) => {
     // Readable folders (Finder selection) stay readable in the chat.
-    const c = newConversation(model, {
-      ...options,
-      tools: options.tools || defaultOptions().tools,
-    });
+    const c = newConversation(model, options);
     c.sessionId = sessionId;
     c.title = titleFrom(props.question);
     c.messages.push({
@@ -211,7 +203,6 @@ export function AnswerView(props: AnswerViewProps) {
                 model={model}
                 options={options}
                 onChange={changeOptions}
-                showTools={!options.readDirs}
               />
             </>
           ) : null}
