@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v1.2] - 2026-10-19
+
 - Replace each agent's overlapping tool checkboxes with one No Tools / Read-only Tools / All Tools selection in Settings and chat options; migrate existing permissions and enforce the current agent selection for every request
 - Keep web search independent in every tool permission mode, including full access; prevent Finder context and saved chat options from elevating agent permissions
 - Coordinate model discovery per provider and runtime so forced refreshes reach the CLI and overlapping full/provider refreshes cannot overwrite newer catalogs
@@ -13,6 +15,8 @@
 - Fix fallback Chat briefly becoming empty during long responses when delayed model dropdown callbacks overwrite the pending conversation
 - Show cached eligible Chat models immediately and keep the dropdown available while refreshing models in the background
 - Restore an eligible default model in the same render as the refreshed Chat model list, preventing a transient Select Model option before the conversation state catches up
+
+[Full changelog](https://github.com/syxb2/raycast-cli-agent/compare/v1.1...v1.2)
 
 ## [v1.1] - 2026-10-18
 
@@ -141,6 +145,7 @@ The entries below are inherited CLI Assistant development milestones, not publis
 - Selection commands: Ask About Selection, Fix Spelling and Grammar, Improve Writing, Make Shorter, Translate, Translate and Replace, Summarize, Explain
 - Streamed answers, follow-up questions, 5-hour and weekly usage display
 
-[Unreleased]: https://github.com/syxb2/raycast-cli-agent/compare/v1.1...HEAD
+[Unreleased]: https://github.com/syxb2/raycast-cli-agent/compare/v1.2...HEAD
+[v1.2]: https://github.com/syxb2/raycast-cli-agent/releases/tag/v1.2
 [v1.1]: https://github.com/syxb2/raycast-cli-agent/releases/tag/v1.1
 [v0.1.1]: https://github.com/syxb2/raycast-cli-agent/releases/tag/v0.1.1
