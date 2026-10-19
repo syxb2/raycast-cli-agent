@@ -124,8 +124,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     if (method === "config/read")
       reply({
         config: {
-          model: cfg.model || "third-party-model",
-          model_provider: "custom",
+          model:
+            cfg.model === null ? undefined : cfg.model || "third-party-model",
+          model_provider: cfg.modelProvider || "custom",
           model_reasoning_effort: "medium",
           mcp_servers: {
             xcode: {
@@ -141,11 +142,20 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         },
       });
     if (method === "model/list") {
-      if (cfg.noCatalog)
+      if (cfg.catalogError || (cfg.catalogPageError && p.cursor))
         send({
           id: record.id,
-          error: { code: -1, message: "catalog unavailable" },
+          error: {
+            code: cfg.catalogErrorCode ?? -32000,
+            message: cfg.catalogError || "catalog page failed",
+          },
         });
+      else if (cfg.noCatalog)
+        send({
+          id: record.id,
+          error: { code: -32601, message: "Method not found" },
+        });
+      else if (cfg.catalogPages) reply(cfg.catalogPages[Number(p.cursor || 0)]);
       else
         reply({
           data: [{ model: "catalog-model", displayName: "Catalog Model" }],

@@ -394,7 +394,7 @@ export function ChatView({
           <ChatActions
             onNew={startNew}
             onHistory={() => push(<HistoryView />)}
-            onRefreshModels={() => catalog.refresh(true)}
+            onRefreshModels={(force) => catalog.refresh(force)}
           />
           <OptionActions
             model={conversation.model}
@@ -489,7 +489,7 @@ export function ChatView({
                   <ChatActions
                     onNew={startNew}
                     onHistory={() => push(<HistoryView />)}
-                    onRefreshModels={() => catalog.refresh(true)}
+                    onRefreshModels={(force) => catalog.refresh(force)}
                   />
                   <OptionActions
                     model={conversation.model}
@@ -514,7 +514,7 @@ function ChatActions({
 }: {
   onNew: (provider?: Provider) => void;
   onHistory: () => void;
-  onRefreshModels: () => void;
+  onRefreshModels: (force?: boolean) => void;
 }) {
   return (
     <ActionPanel.Section>
@@ -548,7 +548,7 @@ function ChatActions({
       <Action
         title="Refresh Model List"
         icon={Icon.ArrowClockwise}
-        onAction={onRefreshModels}
+        onAction={() => onRefreshModels(true)}
       />
     </ActionPanel.Section>
   );

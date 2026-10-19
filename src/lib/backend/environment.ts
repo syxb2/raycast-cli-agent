@@ -5,7 +5,11 @@ import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { Provider } from "../provider";
-import { getProviderSettings, parseEnvironmentVariables } from "../settings";
+import {
+  getProviderSettings,
+  parseEnvironmentVariables,
+  ProviderSettings,
+} from "../settings";
 
 let shellEnvironment: Promise<NodeJS.ProcessEnv> | undefined;
 let resolvedEnvironment: NodeJS.ProcessEnv | undefined;
@@ -14,11 +18,14 @@ export function cachedEnvironment(): NodeJS.ProcessEnv {
   return resolvedEnvironment ?? process.env;
 }
 
-export function providerFingerprint(provider: Provider): string {
-  const env = providerEnvironment(provider, cachedEnvironment());
-  const binary = resolveBinary(provider, env);
+export function providerFingerprint(
+  provider: Provider,
+  settings: ProviderSettings = getProviderSettings(provider),
+): string {
+  const env = providerEnvironment(provider, cachedEnvironment(), settings);
+  const binary = resolveBinary(provider, env, settings);
   return binary
-    ? runtimeFingerprint(provider, binary, env)
+    ? runtimeFingerprint(provider, binary, env, settings)
     : `${provider}:missing`;
 }
 
@@ -83,8 +90,8 @@ export function expandPath(path: string): string {
 export function configDirectory(
   provider: Provider,
   env: NodeJS.ProcessEnv = process.env,
+  settings: ProviderSettings = getProviderSettings(provider),
 ): string {
-  const settings = getProviderSettings(provider);
   const value =
     provider === "codex"
       ? settings.configDir || env.CODEX_HOME || join(homedir(), ".codex")
@@ -101,12 +108,11 @@ export function configDirectory(
 export function providerEnvironment(
   provider: Provider,
   base: NodeJS.ProcessEnv,
+  settings: ProviderSettings = getProviderSettings(provider),
 ): NodeJS.ProcessEnv {
   const env = {
     ...base,
-    ...parseEnvironmentVariables(
-      getProviderSettings(provider).environmentVariables,
-    ),
+    ...parseEnvironmentVariables(settings.environmentVariables),
   };
   return {
     ...env,
@@ -114,15 +120,16 @@ export function providerEnvironment(
       ? "CODEX_HOME"
       : provider === "claude"
         ? "CLAUDE_CONFIG_DIR"
-        : "PI_CODING_AGENT_DIR"]: configDirectory(provider, env),
+        : "PI_CODING_AGENT_DIR"]: configDirectory(provider, env, settings),
   };
 }
 
 export function resolveBinary(
   provider: Provider,
   env: NodeJS.ProcessEnv = process.env,
+  settings: ProviderSettings = getProviderSettings(provider),
 ): string | undefined {
-  const custom = getProviderSettings(provider).cliPath;
+  const custom = settings.cliPath;
   const paths = custom
     ? [expandPath(custom)]
     : [
@@ -172,8 +179,9 @@ export function runtimeFingerprint(
   provider: Provider,
   binary: string,
   env: NodeJS.ProcessEnv,
+  settings: ProviderSettings = getProviderSettings(provider),
 ): string {
-  const dir = configDirectory(provider, env);
+  const dir = configDirectory(provider, env, settings);
   const files =
     provider === "codex"
       ? ["config.toml", "auth.json"]

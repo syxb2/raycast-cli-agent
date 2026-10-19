@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Coordinate model discovery per provider and runtime so forced refreshes reach the CLI and overlapping full/provider refreshes cannot overwrite newer catalogs
+- Keep independent provider freshness and errors, retry only stale or failed providers, and publish completed provider catalogs to open model menus immediately
+- Reuse fresh catalogs when reopening Model Browser or returning from Settings; retain explicit forced refresh actions
+- Preserve complete Codex catalogs on discovery failures; only fall back to a configured third-party model when the CLI explicitly reports an unsupported catalog method
+- Invalidate discovered Codex models and aliases when its runtime changes, preserve custom Codex/Claude IDs independently, and compute model menus from a single indexed catalog/settings snapshot
+- Write model catalogs atomically and prevent stale or unmounted model refresh callbacks from updating view state
 - Fix fallback Chat briefly becoming empty during long responses when delayed model dropdown callbacks overwrite the pending conversation
 - Show cached eligible Chat models immediately and keep the dropdown available while refreshing models in the background
 - Restore an eligible default model in the same render as the refreshed Chat model list, preventing a transient Select Model option before the conversation state catches up

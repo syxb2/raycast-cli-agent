@@ -205,7 +205,7 @@ export function AnswerView(props: AnswerViewProps) {
                 current={model}
                 models={modelsForProvider(catalog.models, providerOf(model))}
                 onSelect={regenerate}
-                onRefresh={() => catalog.refresh(true)}
+                onRefresh={(force) => catalog.refresh(force)}
               />
               <OptionActions
                 model={model}

@@ -7,14 +7,9 @@ import {
   showToast,
   Toast,
 } from "@raycast/api";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { refreshProviderCatalog } from "../lib/modelCatalog";
-import {
-  browserModels,
-  modelLabel,
-  sameModel,
-  setVisibleModels,
-} from "../lib/models";
+import { browserModels, matchingValue, setVisibleModels } from "../lib/models";
 import { Provider, PROVIDER_NAMES } from "../lib/provider";
 import { getProviderSettings, updateProviderSettings } from "../lib/settings";
 
@@ -26,16 +21,20 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const request = useRef(0);
   const reload = () => {
     setModels(browserModels(provider));
     setSelected(getProviderSettings(provider).visibleModels ?? []);
   };
-  const refresh = async () => {
+  const refresh = async (force = true) => {
+    const id = ++request.current;
     setBusy(true);
     try {
-      await refreshProviderCatalog(provider);
+      await refreshProviderCatalog(provider, force);
+      if (id !== request.current) return;
       setError("");
     } catch (error) {
+      if (id !== request.current) return;
       const message = error instanceof Error ? error.message : String(error);
       setError(message);
       await showToast({
@@ -44,12 +43,17 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
         message,
       });
     } finally {
-      reload();
-      setBusy(false);
+      if (id === request.current) {
+        reload();
+        setBusy(false);
+      }
     }
   };
   useEffect(() => {
-    void refresh();
+    void refresh(false);
+    return () => {
+      request.current++;
+    };
   }, [provider]);
   const vendorOf = (id: string) =>
     provider === "pi" ? id.slice(3).split("/")[0] : provider;
@@ -61,6 +65,10 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
     filtered.filter((m) => m.value === id),
   );
   const remaining = filtered.filter((m) => !selected.includes(m.value));
+  const defaultModel = matchingValue(
+    getProviderSettings(provider).defaultModel,
+    models,
+  );
   const update = (ids: string[]) => {
     setVisibleModels(provider, ids);
     reload();
@@ -95,7 +103,7 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
           <Action
             title="Refresh Models"
             icon={Icon.ArrowClockwise}
-            onAction={refresh}
+            onAction={() => refresh()}
           />
         </ActionPanel>
       }
@@ -121,15 +129,12 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
         >
           {section.models.map((model) => {
             const checked = selected.includes(model.value);
-            const isDefault = sameModel(
-              model.value,
-              getProviderSettings(provider).defaultModel,
-            );
+            const isDefault = model.value === defaultModel;
             return (
               <List.Item
                 key={model.value}
                 id={model.value}
-                title={modelLabel(model.value)}
+                title={model.title}
                 subtitle={model.description}
                 icon={checked ? Icon.Checkmark : Icon.Circle}
                 keywords={[model.value, vendorOf(model.value)]}
@@ -200,7 +205,7 @@ export function ModelBrowser({ provider }: { provider: Provider }) {
                         title="Refresh Models"
                         icon={Icon.ArrowClockwise}
                         shortcut={Keyboard.Shortcut.Common.Refresh}
-                        onAction={refresh}
+                        onAction={() => refresh()}
                       />
                     </ActionPanel.Section>
                   </ActionPanel>

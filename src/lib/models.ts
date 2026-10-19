@@ -1,5 +1,6 @@
 import { environment } from "@raycast/api";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import {
   PROVIDERS,
@@ -10,7 +11,6 @@ import {
 } from "./provider";
 
 import {
-  enabledProviders,
   getProviderSettings,
   getSettings,
   updateProviderSettings,
@@ -32,6 +32,17 @@ export interface ModelCatalog {
   models: ModelOption[];
   errors?: Partial<Record<Provider, string>>;
   providerFingerprints: Partial<Record<Provider, string>>;
+  // Missing on legacy v4 catalogs; migrated when a provider next refreshes.
+  providerFetchedAt?: Partial<Record<Provider, number>>;
+}
+
+const catalogListeners = new Set<() => void>();
+
+export function subscribeCatalog(listener: () => void): () => void {
+  catalogListeners.add(listener);
+  return () => {
+    catalogListeners.delete(listener);
+  };
 }
 
 export function isNativeDefault(model: string): boolean {
@@ -48,11 +59,13 @@ function supportFile(name: string): string {
 export function currentModel(
   provider: Provider = getSettings().general.defaultProvider,
 ): string {
-  const settings = getProviderSettings(provider);
+  const snapshot = modelSnapshot();
+  const settings = snapshot.settings.providers[provider];
   if (!settings.enabled)
     throw new Error(
       `${provider} is disabled. Enable it in Cli Agent Settings.`,
     );
+  const visible = snapshot.visible(provider);
   try {
     const saved = JSON.parse(
       readFileSync(supportFile("current-models.json"), "utf8"),
@@ -61,16 +74,13 @@ export function currentModel(
       saved?.defaultModel === settings.defaultModel &&
       isSupportedModel(saved.model) &&
       providerOf(saved.model) === provider &&
-      visibleProviderModels(provider).some((m) =>
-        sameModel(m.value, saved.model),
-      )
+      visible.some((m) => snapshot.same(m.value, saved.model))
     )
       return saved.model;
   } catch {
     /* No remembered model for this provider. */
   }
-  const visible = visibleProviderModels(provider);
-  return visible.some((m) => sameModel(m.value, settings.defaultModel))
+  return visible.some((m) => snapshot.same(m.value, settings.defaultModel))
     ? settings.defaultModel
     : (visible[0]?.value ?? nativeDefault(provider));
 }
@@ -108,65 +118,102 @@ export function loadCatalog(): ModelCatalog | undefined {
 }
 
 export function saveCatalog(catalog: ModelCatalog): void {
-  writeFileSync(supportFile("models.json"), JSON.stringify(catalog));
+  const file = supportFile("models.json");
+  const temp = `${file}.${randomUUID()}.tmp`;
+  writeFileSync(temp, JSON.stringify(catalog), { mode: 0o600 });
+  renameSync(temp, file);
+  for (const listener of catalogListeners) listener();
+}
+
+// One catalog/settings snapshot per operation. Never read files inside model
+// matching loops, and never resolve aliases from a different CLI configuration.
+function modelSnapshot() {
+  const catalog = loadCatalog();
+  const settings = getSettings();
+  const eligible = new Set(
+    PROVIDERS.filter(
+      (provider) =>
+        catalog?.providerFingerprints[provider] ===
+        providerFingerprint(provider, settings.providers[provider]),
+    ),
+  );
+  const entries = (catalog?.models ?? []).filter((m) =>
+    eligible.has(providerOf(m.value)),
+  );
+  const resolutions = new Map(
+    entries.map((m) => [m.value, m.resolvedModel ?? m.value]),
+  );
+  const resolve = (model: string) => resolutions.get(model) ?? model;
+  const same = (a: string, b: string) => a === b || resolve(a) === resolve(b);
+  const label = (original: string) => {
+    if (!isSupportedModel(original)) return original;
+    const model = resolve(original);
+    const provider = providerOf(model);
+    const aliases = settings.providers[provider].modelAliases;
+    const name =
+      aliases[original] ||
+      aliases[model] ||
+      (isNativeDefault(model)
+        ? "CLI default"
+        : model.slice(provider.length + 1));
+    return `${provider}: ${name}`;
+  };
+  const browser = (provider: Provider): ModelOption[] => {
+    const list = entries.filter(
+      (m) => providerOf(m.value) === provider && !isNativeDefault(m.value),
+    );
+    const seen = new Set(list.map((m) => resolve(m.value)));
+    // Custom Codex/Claude IDs remain usable independently of discovery. Pi
+    // selections always require its native authenticated model catalog.
+    if (provider !== "pi") {
+      for (const value of settings.providers[provider].customModels) {
+        if (!isNativeDefault(value) && !seen.has(resolve(value))) {
+          list.push({ value, title: label(value) });
+          seen.add(resolve(value));
+        }
+      }
+    }
+    return list.map((m) => ({ ...m, title: label(m.value) }));
+  };
+  const visible = (provider: Provider) => {
+    const indexed = new Map<string, ModelOption>();
+    for (const model of browser(provider))
+      if (!indexed.has(resolve(model.value)))
+        indexed.set(resolve(model.value), model);
+    const result: ModelOption[] = [];
+    const seen = new Set<string>();
+    for (const id of settings.providers[provider].visibleModels ?? []) {
+      const model = indexed.get(resolve(id));
+      if (model && !seen.has(model.value)) {
+        result.push(model);
+        seen.add(model.value);
+      }
+    }
+    return result;
+  };
+  return { settings, resolve, same, label, browser, visible };
 }
 
 export function resolvedModel(model: string): string {
-  return (
-    loadCatalog()?.models.find((m) => m.value === model)?.resolvedModel ?? model
-  );
+  return modelSnapshot().resolve(model);
 }
 
 // Resolved aliases can share one selected catalog entry.
 export function sameModel(a: string, b: string): boolean {
   if (a === b) return true;
-  return resolvedModel(a) === resolvedModel(b);
+  return modelSnapshot().same(a, b);
 }
 
 export function modelLabel(model: string): string {
-  if (!isSupportedModel(model)) return model;
-  const original = model;
-  model = resolvedModel(model);
-  const provider = providerOf(model);
-  const aliases = getProviderSettings(provider).modelAliases;
-  const alias = aliases[original] || aliases[model];
-  const name =
-    alias ||
-    (isNativeDefault(model) ? "CLI default" : model.slice(provider.length + 1));
-  return `${provider}: ${name}`;
+  return modelSnapshot().label(model);
 }
 
 export function browserModels(provider: Provider): ModelOption[] {
-  const catalog = loadCatalog();
-  if (
-    provider !== "codex" &&
-    catalog?.providerFingerprints[provider] !== providerFingerprint(provider)
-  )
-    return [];
-  const list = (catalog?.models ?? []).filter(
-    (m) => providerOf(m.value) === provider && !isNativeDefault(m.value),
-  );
-  // Codex and Claude accept custom IDs. Pi models must be
-  // returned by its native authenticated discovery, even when entered manually.
-  if (provider !== "pi") {
-    for (const value of getProviderSettings(provider).customModels) {
-      if (
-        !isNativeDefault(value) &&
-        !list.some((m) => sameModel(m.value, value))
-      )
-        list.push({ value, title: modelLabel(value) });
-    }
-  }
-  return list.map((m) => ({ ...m, title: modelLabel(m.value) }));
+  return modelSnapshot().browser(provider);
 }
 
 export function visibleProviderModels(provider: Provider): ModelOption[] {
-  const models = browserModels(provider);
-  const selected = getProviderSettings(provider).visibleModels ?? [];
-  return selected.flatMap((id) => {
-    const model = models.find((m) => sameModel(m.value, id));
-    return model ? [model] : [];
-  });
+  return modelSnapshot().visible(provider);
 }
 
 export function setVisibleModels(provider: Provider, ids: string[]): void {
@@ -180,12 +227,17 @@ export function setVisibleModels(provider: Provider, ids: string[]): void {
 }
 
 export function availableModels(): ModelOption[] {
-  return enabledProviders().flatMap(visibleProviderModels);
+  const snapshot = modelSnapshot();
+  return PROVIDERS.filter(
+    (p) => snapshot.settings.providers[p].enabled,
+  ).flatMap(snapshot.visible);
 }
 
 // The list entry matching the current model, so dropdowns show it as selected.
 export function matchingValue(model: string, list: ModelOption[]): string {
-  return list.find((m) => sameModel(m.value, model))?.value ?? "";
+  if (list.some((m) => m.value === model)) return model;
+  const snapshot = modelSnapshot();
+  return list.find((m) => snapshot.same(m.value, model))?.value ?? "";
 }
 
 // Groups models by the native CLI that owns them.

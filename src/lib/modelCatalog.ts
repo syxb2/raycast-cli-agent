@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { showToast, Toast } from "@raycast/api";
 import { fetchCodexModels } from "./codex";
 import { fetchPiModels } from "./pi";
@@ -8,6 +8,7 @@ import {
   loadCatalog,
   ModelCatalog,
   saveCatalog,
+  subscribeCatalog,
 } from "./models";
 import { loadEnvironment, providerFingerprint } from "./backend/environment";
 import { getProviderSettings, updateProviderSettings } from "./settings";
@@ -21,14 +22,43 @@ const fetchProviderModels = (provider: Provider) =>
   })[provider]();
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-let pending: Promise<ModelCatalog> | undefined;
+interface Discovery {
+  key: string;
+  promise: Promise<void>;
+}
+const pending = new Map<Provider, Discovery>();
+class ProviderDiscoveryError extends Error {}
 
-async function fingerprint(): Promise<string> {
-  await loadEnvironment();
-  return PROVIDERS.map((provider) => {
-    if (!getProviderSettings(provider).enabled) return `${provider}:disabled`;
-    return providerFingerprint(provider);
-  }).join(":");
+const messageOf = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+// Legacy complete catalogs can retain their original freshness. A legacy
+// provider-only write never established freshness for the remaining providers.
+function fetchedTimes(catalog?: ModelCatalog) {
+  if (catalog?.providerFetchedAt) return { ...catalog.providerFetchedAt };
+  return Object.fromEntries(
+    PROVIDERS.flatMap((provider) =>
+      catalog?.fingerprint &&
+      catalog.providerFingerprints[provider] &&
+      !catalog.errors?.[provider]
+        ? [[provider, catalog.fetchedAt]]
+        : [],
+    ),
+  ) as Partial<Record<Provider, number>>;
+}
+
+function isFresh(
+  catalog: ModelCatalog | undefined,
+  provider: Provider,
+  key: string,
+) {
+  const fetchedAt = fetchedTimes(catalog)[provider];
+  return Boolean(
+    catalog?.providerFingerprints[provider] === key &&
+    !catalog?.errors?.[provider] &&
+    fetchedAt &&
+    Date.now() - fetchedAt < MAX_AGE_MS,
+  );
 }
 
 function initializeVisibility(
@@ -53,130 +83,157 @@ function initializeVisibility(
     updateProviderSettings(provider, { visibleModels: [selected.value] });
 }
 
-async function discover(force: boolean): Promise<ModelCatalog> {
-  const key = await fingerprint();
-  const providerFingerprints = {
-    codex: providerFingerprint("codex"),
-    pi: providerFingerprint("pi"),
-    claude: providerFingerprint("claude"),
-  };
-  const cached = loadCatalog();
-  if (
-    !force &&
-    cached?.fingerprint === key &&
-    Date.now() - cached.fetchedAt < MAX_AGE_MS
-  )
-    return cached;
-  const providers = PROVIDERS;
-  const results = await Promise.allSettled(
-    providers.map((provider) =>
-      getProviderSettings(provider).enabled
-        ? fetchProviderModels(provider)
-        : Promise.resolve([]),
-    ),
-  );
-  const models = results.flatMap((result, i) => {
-    if (result.status === "fulfilled") return result.value;
-    return cached?.providerFingerprints[providers[i]] ===
-      providerFingerprints[providers[i]]
-      ? cached.models.filter((m) => providerOf(m.value) === providers[i])
-      : [];
-  });
-  const errors = Object.fromEntries(
-    results.flatMap((result, i) =>
-      result.status === "rejected"
-        ? [
-            [
-              providers[i],
-              result.reason instanceof Error
-                ? result.reason.message
-                : String(result.reason),
-            ],
-          ]
-        : [],
-    ),
-  );
-  if (!models.length)
-    throw new Error(
-      "No models found. Configure an enabled provider in Cli Agent Settings.",
-    );
-  if ((await fingerprint()) !== key)
-    throw new Error(
-      "Provider configuration changed during discovery. Refresh models again.",
-    );
-  const catalog: ModelCatalog = {
-    version: 4,
-    fingerprint: Object.keys(errors).length ? "" : key,
-    fetchedAt: Date.now(),
-    models,
-    errors,
-    providerFingerprints,
-  };
-  saveCatalog(catalog);
-  for (const provider of providers)
-    if (!errors[provider]) initializeVisibility(provider, models);
-  return catalog;
+// All callers share actual discoveries per provider/runtime. Cached reads are
+// never placed in this map, so they cannot swallow a subsequent forced refresh.
+async function refreshOne(provider: Provider, force: boolean): Promise<void> {
+  await loadEnvironment();
+  if (!getProviderSettings(provider).enabled)
+    throw new Error(`Enable ${provider} before discovering its models.`);
+  const key = providerFingerprint(provider);
+  const running = pending.get(provider);
+  if (running?.key === key) return running.promise;
+  if (!force && isFresh(loadCatalog(), provider, key)) return;
+
+  const discovery: Discovery = { key, promise: Promise.resolve() };
+  const task = (async () => {
+    let models: ModelCatalog["models"] = [];
+    let failure: unknown;
+    let failed = false;
+    try {
+      models = await fetchProviderModels(provider);
+    } catch (error) {
+      failed = true;
+      failure = error;
+    }
+    if (
+      pending.get(provider) !== discovery ||
+      !getProviderSettings(provider).enabled ||
+      providerFingerprint(provider) !== key
+    )
+      throw new Error(
+        "Provider configuration changed during discovery. Refresh models again.",
+      );
+
+    // Merge only this provider into the latest document, never the snapshot
+    // from when a full refresh began. Other providers may already have settled.
+    const latest = loadCatalog();
+    const sameRuntime = latest?.providerFingerprints[provider] === key;
+    const errors = { ...latest?.errors };
+    const providerFetchedAt = fetchedTimes(latest);
+    if (failed) {
+      errors[provider] = messageOf(failure);
+      models = sameRuntime
+        ? latest!.models.filter((m) => providerOf(m.value) === provider)
+        : [];
+      if (!sameRuntime) delete providerFetchedAt[provider];
+    } else {
+      delete errors[provider];
+      providerFetchedAt[provider] = Date.now();
+      initializeVisibility(provider, models);
+    }
+    const catalog: ModelCatalog = {
+      version: 4,
+      fingerprint: "",
+      fetchedAt: Math.max(0, ...Object.values(providerFetchedAt)),
+      models: [
+        ...(latest?.models.filter((m) => providerOf(m.value) !== provider) ??
+          []),
+        ...models,
+      ],
+      errors,
+      providerFingerprints: {
+        ...latest?.providerFingerprints,
+        [provider]: key,
+      },
+      providerFetchedAt,
+    };
+    if (
+      PROVIDERS.every(
+        (p) =>
+          !getProviderSettings(p).enabled ||
+          isFresh(catalog, p, providerFingerprint(p)),
+      )
+    )
+      catalog.fingerprint = PROVIDERS.map((p) =>
+        getProviderSettings(p).enabled
+          ? providerFingerprint(p)
+          : `${p}:disabled`,
+      ).join(":");
+    saveCatalog(catalog);
+    if (failed)
+      throw new ProviderDiscoveryError(messageOf(failure), { cause: failure });
+  })();
+  discovery.promise = task;
+  pending.set(provider, discovery);
+  try {
+    await task;
+  } finally {
+    if (pending.get(provider) === discovery) pending.delete(provider);
+  }
 }
 
 export async function refreshProviderCatalog(
   provider: Provider,
+  force = true,
 ): Promise<ModelCatalog> {
-  if (!getProviderSettings(provider).enabled)
-    throw new Error(`Enable ${provider} before discovering its models.`);
-  const key = await fingerprint();
-  const models = await fetchProviderModels(provider);
-  if ((await fingerprint()) !== key)
-    throw new Error(
-      "Provider configuration changed during discovery. Refresh models again.",
+  await refreshOne(provider, force);
+  return loadCatalog()!;
+}
+
+export async function refreshCatalog(force = false): Promise<ModelCatalog> {
+  const providers = PROVIDERS.filter((p) => getProviderSettings(p).enabled);
+  const results = await Promise.allSettled(
+    providers.map((p) => refreshOne(p, force)),
+  );
+  // Discovery errors already persisted above are returned with the catalog.
+  // Configuration changes and storage failures still reject the whole refresh.
+  const unexpected = results.find(
+    (result) =>
+      result.status === "rejected" &&
+      !(result.reason instanceof ProviderDiscoveryError),
+  );
+  if (unexpected?.status === "rejected") throw unexpected.reason;
+  const catalog = loadCatalog();
+  if (!catalog?.models.some((m) => providers.includes(providerOf(m.value)))) {
+    const failures = results.flatMap((result, i) =>
+      result.status === "rejected"
+        ? [`${providers[i]}: ${messageOf(result.reason)}`]
+        : [],
     );
-  const catalog: ModelCatalog = {
-    version: 4,
-    fingerprint: "",
-    fetchedAt: Date.now(),
-    models: [
-      ...(loadCatalog()?.models.filter(
-        (m) => providerOf(m.value) !== provider,
-      ) ?? []),
-      ...models,
-    ],
-    providerFingerprints: {
-      ...loadCatalog()?.providerFingerprints,
-      [provider]: providerFingerprint(provider),
-    },
-  };
-  // A provider-only refresh does not mark another provider's catalog as fresh.
-  saveCatalog(catalog);
-  initializeVisibility(provider, models);
+    throw new Error(
+      [
+        "No models found. Configure an enabled provider in Cli Agent Settings.",
+        ...failures,
+      ].join("\n"),
+    );
+  }
   return catalog;
 }
 
-export function refreshCatalog(force = false): Promise<ModelCatalog> {
-  if (pending) return pending;
-  const refresh = discover(force);
-  pending = refresh;
-  void refresh
-    .finally(() => {
-      if (pending === refresh) pending = undefined;
-    })
-    .catch(() => {});
-  return refresh;
+function catalogErrors(catalog?: ModelCatalog): string {
+  return Object.entries(catalog?.errors ?? {})
+    .filter(([provider]) => getProviderSettings(provider as Provider).enabled)
+    .map(([provider, message]) => `${provider}: ${message}`)
+    .join("\n");
 }
 
 export function useModels() {
   const [models, setModels] = useState(availableModels);
   const [isRefreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
+  const request = useRef(0);
   const refresh = useCallback(async (force = false) => {
+    const id = ++request.current;
     setRefreshing(true);
     try {
       // Validate cached Pi eligibility with the inherited shell environment
       // before waiting for discovery of every enabled provider.
       await loadEnvironment();
+      if (id !== request.current) return;
       setModels(availableModels());
       const catalog = await refreshCatalog(force);
-      const failures = Object.entries(catalog.errors ?? {})
-        .map(([provider, message]) => `${provider}: ${message}`)
-        .join("\n");
+      if (id !== request.current) return;
+      const failures = catalogErrors(catalog);
       setError(failures);
       if (failures)
         await showToast({
@@ -185,7 +242,8 @@ export function useModels() {
           message: failures,
         });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      if (id !== request.current) return;
+      const message = messageOf(error);
       setError(message);
       await showToast({
         style: Toast.Style.Failure,
@@ -193,12 +251,22 @@ export function useModels() {
         message,
       });
     } finally {
-      setModels(availableModels());
-      setRefreshing(false);
+      if (id === request.current) {
+        setModels(availableModels());
+        setRefreshing(false);
+      }
     }
   }, []);
   useEffect(() => {
-    refresh();
+    const unsubscribe = subscribeCatalog(() => {
+      setModels(availableModels());
+      setError(catalogErrors(loadCatalog()));
+    });
+    void refresh();
+    return () => {
+      request.current++;
+      unsubscribe();
+    };
   }, [refresh]);
   return { models, isRefreshing, refresh, error };
 }

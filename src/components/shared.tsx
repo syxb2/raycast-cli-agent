@@ -7,7 +7,7 @@ import {
 } from "@raycast/api";
 import { spawn } from "node:child_process";
 import { ModelError } from "../lib/types";
-import { groupByProvider, ModelOption, sameModel } from "../lib/models";
+import { groupByProvider, ModelOption, matchingValue } from "../lib/models";
 import { effortsForProvider, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
 import { resolveClaudeBinary } from "../lib/claude";
@@ -76,8 +76,9 @@ export function ModelSubmenu(props: {
   current: string;
   models: ModelOption[];
   onSelect: (model: string) => void;
-  onRefresh: () => void;
+  onRefresh: (force?: boolean) => void;
 }) {
+  const selected = matchingValue(props.current, props.models);
   return (
     <ActionPanel.Submenu
       title={props.title}
@@ -93,9 +94,7 @@ export function ModelSubmenu(props: {
             <Action
               key={m.value}
               title={m.title}
-              icon={
-                sameModel(m.value, props.current) ? Icon.Checkmark : Icon.Circle
-              }
+              icon={m.value === selected ? Icon.Checkmark : Icon.Circle}
               onAction={() => props.onSelect(m.value)}
             />
           ))}
@@ -105,7 +104,7 @@ export function ModelSubmenu(props: {
         <Action
           title="Refresh Model List"
           icon={Icon.ArrowClockwise}
-          onAction={props.onRefresh}
+          onAction={() => props.onRefresh(true)}
         />
         <Action.Push
           title="Provider Settings…"

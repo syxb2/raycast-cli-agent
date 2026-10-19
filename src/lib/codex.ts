@@ -10,7 +10,7 @@ import {
   runtimeFingerprint,
   supportDirectory,
 } from "./backend/environment";
-import { JsonLineProcess, RecordValue } from "./backend/rpc";
+import { JsonLineProcess, RecordValue, RpcError } from "./backend/rpc";
 import {
   finishResult,
   instructions,
@@ -384,6 +384,7 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
         description: `Provider: ${config.model_provider || "default"}`,
       });
     let cursor: string | undefined;
+    let pages = 0;
     const seen = new Set<string>();
     // Third-party providers may not expose a catalog. Their configured model still works.
     try {
@@ -393,7 +394,10 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
           { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) },
           15_000,
         );
-        for (const model of page.data ?? []) {
+        if (!Array.isArray(page.data))
+          throw new Error("Codex returned an invalid model catalog.");
+        pages++;
+        for (const model of page.data) {
           const id = model.model || model.id;
           if (id && model.isDefault && !models[0].resolvedModel)
             models[0].resolvedModel = `${CODEX_PREFIX}${id}`;
@@ -409,9 +413,22 @@ export async function fetchCodexModels(): Promise<CodexModel[]> {
           throw new Error("Repeated model catalog cursor.");
         if (cursor) seen.add(cursor);
       } while (cursor);
-    } catch {
-      /* Keep the locally configured model. */
+    } catch (error) {
+      // Only an explicitly unsupported catalog on a configured third-party
+      // backend can fall back. Timeouts, auth failures and partial pages fail
+      // discovery so the caller preserves the last complete catalog.
+      if (!(
+        pages === 0 &&
+        config.model &&
+        config.model_provider &&
+        config.model_provider !== "openai" &&
+        error instanceof RpcError &&
+        error.code === -32601
+      ))
+        throw error;
     }
+    if (models.length === 1)
+      throw new Error("Codex did not report any usable models.");
     return models;
   } finally {
     lease.release();

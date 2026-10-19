@@ -1565,7 +1565,11 @@ test("Claude CLI defaults follow native settings and environment without inferen
     });
     assert.equal(backend.modelLabel("claude:opus"), "claude: Claude Opus");
     writeFileSync(nativeSettings, JSON.stringify({ model: "sonnet" }));
-    assert.deepEqual(backend.browserModels("claude"), []);
+    assert.deepEqual(
+      backend.browserModels("claude").map((m) => m.value),
+      ["claude:custom-other"],
+      "Runtime changes invalidate discovered models while explicit custom IDs remain available",
+    );
     backend.updateProviderSettings("claude", { enabled: false });
     const start = events().length;
     const result = await backend.runModel({
@@ -1598,5 +1602,80 @@ test("Claude can be the sole enabled and default provider", () => {
     backend.updateProviderSettings("pi", previous.providers.pi);
     backend.updateProviderSettings("claude", previous.providers.claude);
     backend.updateGeneralSettings(previous.general);
+  }
+});
+
+test("Codex reports catalog errors instead of treating incomplete discovery as successful", async () => {
+  const file = join(codexDir, "fixture.json");
+  const previous = readFileSync(file, "utf8");
+  try {
+    for (const fixture of [
+      { catalogError: "model/list timed out." },
+      { catalogError: "authentication failed" },
+      { noCatalog: true, modelProvider: "openai" },
+      { noCatalog: true, model: null },
+      { catalogPages: [{ data: [], nextCursor: "0" }] },
+      {
+        catalogPages: [{ data: [{ model: "partial" }], nextCursor: "1" }],
+        catalogPageError: true,
+      },
+      { catalogPages: [{ nextCursor: null }] },
+      { model: null, catalogPages: [{ data: [], nextCursor: null }] },
+    ]) {
+      writeFileSync(file, JSON.stringify(fixture));
+      await assert.rejects(
+        backend.fetchCodexModels(),
+        undefined,
+        JSON.stringify(fixture),
+      );
+    }
+    writeFileSync(file, JSON.stringify({ noCatalog: true }));
+    const fallback = await backend.fetchCodexModels();
+    assert.ok(fallback.some((m) => m.value === "codex:third-party-model"));
+  } finally {
+    writeFileSync(file, previous);
+  }
+});
+
+test("full refresh preserves the last complete Codex catalog after an RPC failure and retries it", async () => {
+  const file = join(codexDir, "fixture.json");
+  const fixture = readFileSync(file, "utf8");
+  const previous = backend.loadCatalog();
+  try {
+    writeFileSync(file, "{}");
+    const valid = await backend.refreshCatalog(true);
+    const codexModels = valid.models.filter((m) =>
+      m.value.startsWith("codex:"),
+    );
+    writeFileSync(
+      file,
+      JSON.stringify({ catalogError: "temporary catalog failure" }),
+    );
+    const failed = await backend.refreshCatalog(true);
+    assert.deepEqual(
+      failed.models.filter((m) => m.value.startsWith("codex:")),
+      codexModels,
+    );
+    assert.equal(failed.errors.codex, "temporary catalog failure");
+    assert.equal(failed.providerFetchedAt.codex, valid.providerFetchedAt.codex);
+    writeFileSync(file, "{}");
+    const start = events().length;
+    const recovered = await backend.refreshCatalog();
+    assert.equal(recovered.errors.codex, undefined);
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "model/list").length,
+      1,
+    );
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.type === "get_available_models").length,
+      0,
+    );
+  } finally {
+    writeFileSync(file, fixture);
+    if (previous) backend.saveCatalog(previous);
   }
 });

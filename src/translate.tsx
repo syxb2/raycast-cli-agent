@@ -197,7 +197,7 @@ export default function Command() {
                 current={model}
                 models={catalog.models}
                 onSelect={changeModel}
-                onRefresh={() => catalog.refresh(true)}
+                onRefresh={(force) => catalog.refresh(force)}
               />
             </ActionPanel>
           }

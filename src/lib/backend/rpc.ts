@@ -4,6 +4,15 @@ import { createInterface, Interface } from "node:readline";
 // Providers own their wire formats; this class owns JSONL and process lifecycle.
 export type RecordValue = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
+export class RpcError extends Error {
+  constructor(
+    message: string,
+    readonly code?: number,
+  ) {
+    super(message);
+  }
+}
+
 export class JsonLineProcess {
   readonly child: ChildProcessWithoutNullStreams;
   private lines: Interface;
@@ -151,10 +160,13 @@ export class JsonLineProcess {
       this.pending.delete(record.id);
       if (record.error || record.success === false) {
         pending.reject(
-          new Error(
+          new RpcError(
             typeof record.error === "string"
               ? record.error
               : record.error?.message || "CLI request failed.",
+            typeof record.error?.code === "number"
+              ? record.error.code
+              : undefined,
           ),
         );
       } else pending.resolve(record.result ?? record.data ?? {});
