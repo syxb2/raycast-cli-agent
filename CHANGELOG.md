@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fix fallback Chat briefly becoming empty during long responses when delayed model dropdown callbacks overwrite the pending conversation
+- Show cached eligible Chat models immediately and keep the dropdown available while refreshing models in the background
+- Restore an eligible default model in the same render as the refreshed Chat model list, preventing a transient Select Model option before the conversation state catches up
+
 ## [v1.1] - 2026-10-18
 
 - Add Claude Code CLI support with independent settings, model discovery without inference, streaming and resumable chats, read-only tools and reviewed commands

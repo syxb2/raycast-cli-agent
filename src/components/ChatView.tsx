@@ -54,9 +54,22 @@ export function ChatView({
   autoRun?: string;
 }) {
   const { push } = useNavigation();
-  const [conversation, setConversation] = useState<Conversation>(
+  const [conversation, setConversationState] = useState<Conversation>(
     () => initial ?? newConversation(currentModel(), defaultOptions()),
   );
+  // Native dropdown callbacks can arrive from a render before send(). Keep
+  // their source current synchronously, even before React renders the message.
+  const currentConversation = useRef(conversation);
+  const setConversation = (
+    update: Conversation | ((previous: Conversation) => Conversation),
+  ) => {
+    const next =
+      typeof update === "function"
+        ? update(currentConversation.current)
+        : update;
+    currentConversation.current = next;
+    setConversationState(next);
+  };
   // Match Raycast's initial fallback search text, then clear it when sending.
   // Starting with an empty value lets its delayed prefill overwrite our reset.
   const [input, setInput] = useState(firstQuestion?.trim() || "");
@@ -84,6 +97,17 @@ export function ChatView({
   const displayedPendingId = queuedQuestion?.id ?? pendingId;
   const catalog = useModels();
   const models = chatModelChoices(conversation, catalog.models);
+  const currentModelValue = matchingValue(conversation.model, models);
+  // Resolve the restored draft selection in the same render as the new model
+  // list. Discovery can finish before the effect updates the conversation.
+  const modelToRestore =
+    !currentModelValue &&
+    !conversation.messages.length &&
+    getProviderSettings(conversation.provider).enabled
+      ? matchingValue(currentModel(conversation.provider), models)
+      : "";
+  const selectedModelValue = currentModelValue || modelToRestore;
+  const selectedModel = models.find((m) => m.value === selectedModelValue);
   const sentFirst = useRef(false);
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
@@ -104,21 +128,15 @@ export function ChatView({
   }, [firstQuestion]);
 
   useEffect(() => {
-    if (
-      conversation.messages.length ||
-      !getProviderSettings(conversation.provider).enabled ||
-      matchingValue(conversation.model, models)
-    )
-      return;
-    const fallback = currentModel(conversation.provider);
-    if (matchingValue(fallback, models))
-      setConversation((previous) => ({ ...previous, model: fallback }));
-  }, [
-    catalog.models,
-    catalog.isRefreshing,
-    conversation.model,
-    conversation.messages.length,
-  ]);
+    if (!modelToRestore) return;
+    setConversation((previous) =>
+      previous.id !== conversation.id ||
+      previous.messages.length ||
+      matchingValue(previous.model, models)
+        ? previous
+        : selectChatModel(previous, modelToRestore),
+    );
+  }, [conversation.id, modelToRestore]);
 
   // `prompt` replaces the question for the model (approved command results);
   // `from` is the conversation to continue when state isn't updated yet.
@@ -249,22 +267,26 @@ export function ChatView({
   };
 
   const changeModel = (model: string) => {
+    const current = currentConversation.current;
     if (
-      !models.some((m) => m.value === model) ||
+      current.id !== conversation.id ||
+      model === current.model ||
+      !availableModels().some((m) => m.value === model) ||
       !getProviderSettings(providerOf(model)).enabled ||
-      (conversation.messages.length > 0 &&
-        providerOf(model) !== conversation.provider)
+      (current.messages.length > 0 && providerOf(model) !== current.provider)
     )
       return;
     setCurrentModel(model);
-    const updated = selectChatModel(conversation, model);
+    const updated = selectChatModel(current, model);
     activeId.current = updated.id;
     setConversation(updated);
     if (updated.messages.length) void saveConversation(updated);
   };
 
   const changeOptions = (options: RequestOptions) => {
-    const updated = { ...conversation, options };
+    const current = currentConversation.current;
+    if (current.id !== conversation.id) return;
+    const updated = { ...current, options };
     setConversation(updated);
     if (updated.messages.length) saveConversation(updated);
   };
@@ -331,7 +353,9 @@ export function ChatView({
       selectedItemId={selectedId}
       onSelectionChange={(id) => id && setSelectedId(id)}
       searchBarAccessory={
-        models.length && !catalog.isRefreshing ? (
+        // Only expose an empty selection once discovery confirms it. A valid
+        // cached selection stays visible without entering a loading state.
+        models.length > 0 && (selectedModel || !catalog.isRefreshing) ? (
           <List.Dropdown
             key={conversation.provider}
             tooltip={
@@ -339,21 +363,15 @@ export function ChatView({
                 ? `Model (${PROVIDER_NAMES[conversation.provider]})`
                 : "Choose Agent and Model"
             }
-            isLoading={catalog.isRefreshing}
-            placeholder={
-              catalog.isRefreshing ? "Loading Models…" : "Select Model"
-            }
-            value={matchingValue(conversation.model, models)}
-            defaultValue={matchingValue(conversation.model, models)}
+            placeholder="Search Models"
+            value={selectedModelValue}
+            defaultValue={selectedModelValue}
             onChange={changeModel}
           >
-            {!matchingValue(conversation.model, models) ? (
+            {!selectedModel ? (
               <List.Dropdown.Item value="" title="Select Model" />
             ) : null}
-            {groupByProvider(
-              models,
-              matchingValue(conversation.model, models),
-            ).map((g) => (
+            {groupByProvider(models, selectedModelValue).map((g) => (
               <List.Dropdown.Section
                 key={g.provider}
                 title={PROVIDER_NAMES[g.provider]}
