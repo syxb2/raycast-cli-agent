@@ -2,12 +2,16 @@
 
 ## [Unreleased]
 
+## [v1.3] - 2026-10-22
+
 - Make Copy Answer the default Enter action after replies finish in Chat and answer views; keep sending typed follow-ups first and retain Retry on ⌘R
 - Add Retry (⌘R) for the latest Chat reply, including stopped and failed requests; replace the reply in place, preserve its full prompt and session, and prevent overlapping retries
 - Preserve saved model selections in Settings while catalogs load or become unavailable, refresh open selectors after catalog changes, and reuse precomputed model labels
 - Reuse model catalogs across Raycast command and shell metadata changes while continuing to invalidate them for CLI, configuration, credential and meaningful environment changes
 - Keep Chat message icons consistent while replies stream; replace the segmented progress ring and animated sidebar dots with a native message icon and Thinking status text
 - Show loading hints only before reply text arrives in Chat and answers; hide sidebar and inline status indicators during generation
+
+[Full changelog](https://github.com/syxb2/raycast-cli-agent/compare/v1.2...v1.3)
 
 ## [v1.2] - 2026-10-19
 
