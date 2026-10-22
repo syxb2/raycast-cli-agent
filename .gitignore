@@ -4,3 +4,6 @@ raycast-env.d.ts
 dist/
 reference
 docs
+
+.agents
+.vscode
