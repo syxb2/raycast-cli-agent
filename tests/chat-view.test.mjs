@@ -63,7 +63,9 @@ for (const model of ["codex:test", "codex:other", "pi:test"]) {
       assert.equal(pending.props.selectedItemId, id);
       assert.match(detail(pending), /thinking/);
       host.stream.text = "Partial answer";
-      assert.match(detail(host.render()), /Partial answer.*Generating/s);
+      const generating = host.render();
+      assert.match(detail(generating), /Partial answer$/);
+      assert.equal(rows(generating)[0].props.accessories, undefined);
       host.finish("Finished answer");
       await tick();
       const finished = host.render();
@@ -264,6 +266,176 @@ test("a callback from an old chat cannot replace a new draft", () => {
       host.render().props.searchBarAccessory.props.value,
       "codex:test",
     );
+    assert.equal(host.requests.length, 0);
+  } finally {
+    host.dispose();
+  }
+});
+
+const action = (tree, title, index = 0) =>
+  rows(tree)[index].props.actions.props.children.find(
+    (child) => child?.props.title === title,
+  );
+function retryConversation(message = {}) {
+  return {
+    id: "retry-chat",
+    sessionId: "retry-session",
+    provider: "codex",
+    model: "codex:test",
+    title: "Chat",
+    options: { effort: "high" },
+    messages: [
+      {
+        id: "older",
+        question: "Earlier question",
+        answer: "Earlier answer",
+        createdAt: 1,
+      },
+      {
+        id: "latest",
+        question: "Hello",
+        answer: "",
+        error: "Stopped.",
+        createdAt: 2,
+        ...message,
+      },
+    ],
+  };
+}
+
+for (const message of [
+  { error: "Stopped." },
+  { error: "Network error" },
+  { answer: "Partial reply", error: undefined },
+  { answer: "Finished reply", error: undefined },
+]) {
+  test(`Retry replaces the latest reply in its existing session (${message.error ?? message.answer})`, async () => {
+    const initial = retryConversation(message);
+    const host = createHost(ChatView, { initial });
+    try {
+      const tree = host.render();
+      assert.equal(
+        action(tree, "Retry", 1),
+        undefined,
+        "Earlier turns cannot be rewound",
+      );
+      tree.props.onSearchTextChange("Unsent follow-up");
+      host.render();
+      const request = action(host.tree, "Retry").props.onAction();
+      const pending = host.render();
+      assert.equal(rows(pending).length, 2);
+      assert.equal(rows(pending)[0].props.id, "latest");
+      assert.equal(pending.props.searchText, "Unsent follow-up");
+      assert.match(detail(pending), /thinking/);
+      assert.doesNotMatch(
+        detail(pending),
+        /Stopped|Network error|Partial reply|Finished reply/,
+      );
+      assert.equal(action(pending, "Retry"), undefined);
+      assert.ok(action(pending, "Stop"));
+      assert.equal(host.requests.length, 1);
+      assert.equal(host.requests[0].sessionId, initial.sessionId);
+      assert.equal(host.requests[0].model, "codex:test");
+      assert.equal(host.requests[0].effort, "high");
+      assert.equal(host.requests[0].prompt, "Hello");
+      host.finish("Retried answer");
+      await request;
+      assert.match(detail(host.render()), /Retried answer/);
+      assert.ok(action(host.tree, "Retry"));
+      const primary = rows(host.tree)[0].props.actions.props.children.find(
+        (child) => child?.props.title,
+      );
+      assert.equal(primary.props.title, "Send Message");
+      host.tree.props.onSearchTextChange("");
+      host.render();
+      const copy = rows(host.tree)[0].props.actions.props.children.find(
+        (child) => child?.props.title,
+      );
+      assert.equal(copy.type, "Copy");
+      assert.equal(copy.props.content, "Retried answer");
+      const saved = host.saved.at(-1);
+      assert.equal(saved.messages.length, 2);
+      assert.deepEqual(saved.messages[0], initial.messages[0]);
+      assert.equal(saved.messages[1].id, "latest");
+      assert.equal(saved.messages[1].createdAt, 2);
+      assert.equal(saved.messages[1].error, undefined);
+    } finally {
+      host.dispose();
+    }
+  });
+}
+
+test("Retry uses the original full prompt and latest model/options, even from a delayed menu callback", async () => {
+  const initial = retryConversation({
+    prompt: "Full request including selected text",
+    systemPrompt: "Custom instructions",
+  });
+  const host = createHost(ChatView, { initial });
+  try {
+    const tree = host.render();
+    const retry = action(tree, "Retry").props.onAction;
+    tree.props.searchBarAccessory.props.onChange("codex:other");
+    rows(tree)[0]
+      .props.actions.props.children.find(
+        (child) => child?.type === "OptionActions",
+      )
+      .props.onChange({ effort: "max" });
+    const request = retry();
+    assert.equal(host.requests[0].prompt, initial.messages[1].prompt);
+    assert.equal(host.requests[0].systemPrompt, "Custom instructions");
+    assert.equal(host.requests[0].model, "codex:other");
+    assert.equal(host.requests[0].effort, "max");
+    host.finish("New answer");
+    await request;
+    assert.equal(
+      host.saved.at(-1).messages[1].prompt,
+      initial.messages[1].prompt,
+    );
+  } finally {
+    host.dispose();
+  }
+});
+
+test("repeated Retry clicks cannot start overlapping requests and failed retries can be retried again", async () => {
+  const host = createHost(ChatView, { initial: retryConversation() });
+  try {
+    const retry = action(host.render(), "Retry").props.onAction;
+    const first = retry();
+    await retry();
+    assert.equal(host.requests.length, 1);
+    host.finish("", {
+      isError: true,
+      error: { kind: "other", message: "Offline" },
+    });
+    await first;
+    assert.match(detail(host.render()), /Offline/);
+    const second = action(host.tree, "Retry").props.onAction();
+    assert.equal(host.requests.length, 2);
+    host.finish("Recovered");
+    await second;
+    assert.match(detail(host.render()), /Recovered/);
+  } finally {
+    host.dispose();
+  }
+});
+
+test("Retry cannot submit an unavailable model or a stale action belonging to another chat", async () => {
+  const host = createHost(ChatView, { initial: retryConversation() });
+  try {
+    const tree = host.render();
+    const retry = action(tree, "Retry").props.onAction;
+    const models = host.catalog.models;
+    host.catalog.models = [];
+    await retry();
+    assert.equal(host.requests.length, 0);
+    assert.match(detail(host.render()), /Stopped/);
+    host.catalog.models = models;
+    rows(host.tree)[0]
+      .props.actions.props.children.find(
+        (child) => typeof child?.props.onNew === "function",
+      )
+      .props.onNew("codex");
+    await retry();
     assert.equal(host.requests.length, 0);
   } finally {
     host.dispose();

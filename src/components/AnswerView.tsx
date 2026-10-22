@@ -49,7 +49,7 @@ export function AnswerView(props: AnswerViewProps) {
   // Each run opens its own session; "Continue in Chat" resumes it with --resume.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const stream = useModelStream();
-  const spinner = useLoadingIndicator(stream.isLoading);
+  const spinner = useLoadingIndicator(stream.isLoading && !stream.text);
   const catalog = useModels();
 
   // Raycast wraps development extensions in React StrictMode, which mounts,
@@ -92,6 +92,8 @@ export function AnswerView(props: AnswerViewProps) {
     c.messages.push({
       id: crypto.randomUUID(),
       question: props.question,
+      prompt: props.prompt,
+      systemPrompt: props.systemPrompt,
       answer: stream.text,
       createdAt: Date.now(),
       model,
@@ -105,9 +107,8 @@ export function AnswerView(props: AnswerViewProps) {
 
   const body =
     stream.error && !stream.text ? errorMarkdown(stream.error) : stream.text;
-  const status = stream.isLoading
-    ? `\n\n_${spinner} ${stream.text ? "Generating…" : "thinking..."}_`
-    : "";
+  const status =
+    stream.isLoading && !stream.text ? `\n\n_${spinner} thinking..._` : "";
   const commands = stream.isLoading ? undefined : stream.commands;
   const markdown = `**${escape(props.question)}**\n\n---\n\n${stepsMarkdown(stream.steps)}${commands?.length && !stream.text ? "" : body}${status}${commandsMarkdown(commands)}`;
   const done = !stream.isLoading && !stream.error && stream.text.length > 0;
@@ -152,6 +153,13 @@ export function AnswerView(props: AnswerViewProps) {
               onAction={stream.stop}
             />
           ) : null}
+          {done ? (
+            <Action.CopyToClipboard
+              title="Copy Answer"
+              content={stream.text}
+              shortcut={Keyboard.Shortcut.Common.Copy}
+            />
+          ) : null}
           {commands?.length ? (
             <ActionPanel.Section>
               {commands.map((c) => (
@@ -175,11 +183,6 @@ export function AnswerView(props: AnswerViewProps) {
                 title="Continue in Chat"
                 icon={Icon.Bubble}
                 onAction={() => continueInChat()}
-              />
-              <Action.CopyToClipboard
-                title="Copy Answer"
-                content={stream.text}
-                shortcut={Keyboard.Shortcut.Common.Copy}
               />
             </>
           ) : null}

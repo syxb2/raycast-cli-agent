@@ -1341,6 +1341,58 @@ test("provider environment overrides are literal and validated without shell eva
   assert.deepEqual(backend.getProviderSettings("pi"), before);
 });
 
+test("runtime fingerprints reuse catalogs across launcher metadata changes while tracking real configuration", () => {
+  for (const provider of ["codex", "pi", "claude"]) {
+    const settings = backend.getProviderSettings(provider);
+    const binary =
+      provider === "pi"
+        ? piPath
+        : provider === "claude"
+          ? claudePath
+          : codexPath;
+    const first = {
+      PATH: "/fixture/bin",
+      API_KEY: "first",
+      RAYCAST_COMMAND_NAME: "settings",
+      SHLVL: "1",
+      _: "/bin/env",
+      PWD: "/first",
+      NODE_CHANNEL_FD: "4",
+      XPC_SERVICE_NAME: "first",
+    };
+    const next = {
+      ...first,
+      RAYCAST_COMMAND_NAME: "chat",
+      SHLVL: "2",
+      _: "/bin/pi",
+      PWD: "/second",
+      NODE_CHANNEL_FD: "8",
+      XPC_SERVICE_NAME: "second",
+      RAYCAST_LAUNCH_ID: "new",
+    };
+    const fingerprint = (env, overrides = settings) =>
+      backend.runtimeFingerprint(provider, binary, env, overrides);
+    assert.equal(fingerprint(first), fingerprint(next));
+    for (const changed of [
+      { ...next, API_KEY: "second" },
+      { ...next, HTTPS_PROXY: "http://proxy" },
+      { ...next, PATH: "/another/bin" },
+      { ...next, NODE_OPTIONS: "--conditions=custom" },
+    ])
+      assert.notEqual(fingerprint(next), fingerprint(changed));
+    assert.notEqual(
+      fingerprint(next),
+      fingerprint(next, { ...settings, configDir: join(dir, "other-config") }),
+    );
+    // User-defined values remain meaningful even for normally transient keys.
+    const explicit = {
+      ...settings,
+      environmentVariables: "RAYCAST_COMMAND_NAME=custom",
+    };
+    assert.notEqual(fingerprint(first, explicit), fingerprint(next, explicit));
+  }
+});
+
 test("Claude is an independent opt-in provider with validated models and effort", () => {
   assert.equal(backend.providerOf("claude:sonnet"), "claude");
   assert.equal(backend.getProviderSettings("claude").enabled, false);

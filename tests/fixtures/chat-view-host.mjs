@@ -72,7 +72,9 @@ export const enabledProviders = () => ["codex", "pi"];
 export const getProviderSettings = () => ({ enabled: true });
 export const getSettings = () => ({ general: { defaultProvider: "codex" } });
 export const titleFrom = (question) => question;
-export const saveConversation = async () => {};
+export const saveConversation = async (conversation) => {
+  active.saved.push(structuredClone(conversation));
+};
 export const newConversation = (model, options) => ({
   id: crypto.randomUUID(),
   sessionId: crypto.randomUUID(),
@@ -91,13 +93,13 @@ export const useModelStream = () => {
     ...host.stream,
     run: (options) => {
       host.requests.push(options);
-      host.stream.isLoading = true;
+      host.stream = { isLoading: true, text: "" };
       host.dirty = true;
       return new Promise((resolve) => {
-        host.finish = (text) => {
-          host.stream = { isLoading: false, text };
+        host.finish = (text, result = {}) => {
+          host.stream = { isLoading: false, text, ...result };
           host.dirty = true;
-          resolve({ text, isError: false });
+          resolve({ text, isError: false, ...result });
         };
       });
     },
@@ -109,6 +111,7 @@ export function createHost(Component, props) {
     slots: [],
     effects: [],
     requests: [],
+    saved: [],
     frames: [],
     defaultModel: "codex:test",
     dirty: true,

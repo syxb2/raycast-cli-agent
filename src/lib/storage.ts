@@ -20,6 +20,9 @@ import { claimSessionProvider, deleteSessionBinding } from "./backend/sessions";
 export interface Message {
   id: string;
   question: string;
+  // Preserve the actual request when the displayed question is abbreviated.
+  prompt?: string;
+  systemPrompt?: string;
   answer: string;
   createdAt: number;
   error?: string;

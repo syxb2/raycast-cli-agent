@@ -10,8 +10,8 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { accessSync, constants, statSync } from "node:fs";
-import { useState } from "react";
-import { expandPath } from "../lib/backend/environment";
+import { useEffect, useState } from "react";
+import { expandPath, loadEnvironment } from "../lib/backend/environment";
 import { LANGUAGES } from "../lib/languages";
 import { refreshProviderCatalog } from "../lib/modelCatalog";
 import {
@@ -19,6 +19,7 @@ import {
   modelLabel,
   ModelOption,
   sameModel,
+  subscribeCatalog,
 } from "../lib/models";
 import { ModelBrowser } from "./ModelBrowser";
 import {
@@ -263,6 +264,18 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
   const [models, setModels] = useState(() => browserModels(provider));
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const reload = () => {
+      if (active) setModels(browserModels(provider));
+    };
+    const unsubscribe = subscribeCatalog(reload);
+    void loadEnvironment().then(reload);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [provider]);
   const set = <K extends keyof ProviderDraft>(
     key: K,
     value: ProviderDraft[K],
@@ -299,6 +312,8 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
   );
   for (const raw of [
     nativeDefault,
+    draft.defaultModel,
+    ...(draft.visibleModels ?? []),
     ...(provider !== "pi" ? draft.customModelsText.split(/[\n,]/) : []),
   ]) {
     try {
@@ -481,11 +496,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         {choices.map((model: ModelOption) => (
           <Form.Dropdown.Item
             key={model.value}
-            title={
-              model.value === nativeDefault
-                ? "Follow CLI Configuration"
-                : modelLabel(model.value)
-            }
+            title={model.title}
             value={model.value}
           />
         ))}
@@ -505,7 +516,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       ) : null}
       <Form.Description
         title="Visible Models"
-        text="Only these discovered models appear in chats. Clearing this list hides all models for this agent. Model discovery does not add new models to an existing selection."
+        text="Selected models appear in chats when available. Saved selections are kept while models reload. Clearing this list hides all models for this agent."
       />
       <Form.TagPicker
         id="visibleModels"
@@ -514,15 +525,15 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         onChange={(value) => set("visibleModels", value)}
       >
         {choices
-          .filter((model) => model.value !== nativeDefault)
+          .filter(
+            (model) =>
+              model.value !== nativeDefault ||
+              draft.visibleModels?.includes(model.value),
+          )
           .map((model) => (
             <Form.TagPicker.Item
               key={model.value}
-              title={
-                model.value === nativeDefault
-                  ? "Follow CLI Configuration"
-                  : modelLabel(model.value)
-              }
+              title={model.title}
               value={model.value}
             />
           ))}

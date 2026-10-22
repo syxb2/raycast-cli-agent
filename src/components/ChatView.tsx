@@ -93,7 +93,7 @@ export function ChatView({
   const [pendingId, setPendingId] = useState<string | undefined>();
   const stream = useModelStream();
   const isLoading = Boolean(queuedQuestion) || stream.isLoading;
-  const spinner = useLoadingIndicator(isLoading);
+  const spinner = useLoadingIndicator(isLoading && !stream.text);
   const displayedPendingId = queuedQuestion?.id ?? pendingId;
   const catalog = useModels();
   const models = chatModelChoices(conversation, catalog.models);
@@ -111,6 +111,7 @@ export function ChatView({
   const sentFirst = useRef(false);
   // If "New Chat" is opened mid-request, the late answer must not land in the new chat.
   const activeId = useRef(conversation.id);
+  const runningRequest = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!firstQuestion?.trim() || sentFirst.current || queuedQuestion) return;
@@ -143,10 +144,17 @@ export function ChatView({
   const send = async (
     question: string,
     prompt?: string,
-    from: Conversation = conversation,
+    from: Conversation = currentConversation.current,
+    retryMessage?: Message,
   ) => {
     const q = question.trim();
-    if (!q || stream.isLoading) return;
+    if (!q || stream.isLoading || runningRequest.current) return;
+    if (
+      retryMessage &&
+      (from.id !== currentConversation.current.id ||
+        currentConversation.current.messages.at(-1)?.id !== retryMessage.id)
+    )
+      return;
     if (!matchingValue(from.model, availableModels())) {
       await showToast({
         style: Toast.Style.Failure,
@@ -157,49 +165,67 @@ export function ChatView({
       return;
     }
     const msg: Message = {
-      id: queuedQuestion?.id ?? crypto.randomUUID(),
+      id: retryMessage?.id ?? queuedQuestion?.id ?? crypto.randomUUID(),
       question: q,
+      prompt,
+      systemPrompt: retryMessage?.systemPrompt,
       answer: "",
-      createdAt: Date.now(),
+      createdAt: retryMessage?.createdAt ?? Date.now(),
       model: from.model,
     };
     const base: Conversation = {
       ...from,
       title: from.title || titleFrom(q),
-      messages: [...from.messages, msg],
+      messages: retryMessage
+        ? from.messages.map((m) => (m.id === msg.id ? msg : m))
+        : [...from.messages, msg],
     };
+    runningRequest.current = msg.id;
     setConversation(base);
     setQueuedQuestion(undefined);
-    setInput("");
+    if (!retryMessage) setInput("");
     setSelectedId(msg.id);
     setPendingId(msg.id);
 
-    const result = await stream.run({
-      prompt: prompt ?? q,
-      model: from.model,
-      sessionId: from.sessionId,
-      ...from.options,
-    });
-    const finished: Message = {
-      ...msg,
-      answer: result.text,
-      error:
-        result.isError && !result.text
-          ? errorMarkdown(result.error!)
-          : undefined,
-      commands: result.commands,
-      steps: result.steps,
-      durationMs: result.durationMs,
-    };
-    const updated = {
-      ...base,
-      updatedAt: Date.now(),
-      messages: base.messages.map((m) => (m.id === msg.id ? finished : m)),
-    };
-    await saveConversation(updated);
-    if (activeId.current !== updated.id) return;
-    setConversation(updated);
-    setPendingId(undefined);
+    try {
+      const result = await stream.run({
+        prompt: prompt ?? q,
+        systemPrompt: msg.systemPrompt,
+        model: from.model,
+        sessionId: from.sessionId,
+        ...from.options,
+      });
+      const finished: Message = {
+        ...msg,
+        answer: result.text,
+        error:
+          result.isError && !result.text
+            ? errorMarkdown(result.error!)
+            : undefined,
+        commands: result.commands,
+        steps: result.steps,
+        durationMs: result.durationMs,
+      };
+      const updated = {
+        ...base,
+        updatedAt: Date.now(),
+        messages: base.messages.map((m) => (m.id === msg.id ? finished : m)),
+      };
+      await saveConversation(updated);
+      if (activeId.current !== updated.id) return;
+      setConversation(updated);
+      setPendingId(undefined);
+    } finally {
+      if (runningRequest.current === msg.id) runningRequest.current = undefined;
+    }
+  };
+
+  const retry = (message: Message) => {
+    const current = currentConversation.current;
+    if (current.id !== conversation.id) return;
+    const latest = current.messages.at(-1);
+    if (!latest || latest.id !== message.id) return;
+    return send(latest.question, latest.prompt, current, latest);
   };
 
   useEffect(() => {
@@ -260,6 +286,7 @@ export function ChatView({
     );
     setCurrentModel(model);
     activeId.current = fresh.id;
+    runningRequest.current = undefined;
     setPendingId(undefined);
     setConversation(fresh);
     setSelectedId(undefined);
@@ -316,8 +343,8 @@ export function ChatView({
   const detailOf = (m: Message) => {
     const question = `**${m.question.replace(/\n+/g, " ")}**\n\n---\n\n`;
     if (m.id === displayedPendingId) {
-      const status = stream.text ? "Generating…" : "thinking...";
-      return `${question}${stepsMarkdown(stream.steps)}${stream.text}${stream.text ? "\n\n" : ""}_${spinner} ${status}_`;
+      const status = stream.text ? "" : `_${spinner} thinking..._`;
+      return `${question}${stepsMarkdown(stream.steps)}${stream.text}${status}`;
     }
     return `${question}${stepsMarkdown(m.steps)}${m.error ?? m.answer}${commandsMarkdown(m.commands)}${footerMarkdown(m.model, modelLabel, m.durationMs)}`;
   };
@@ -425,21 +452,38 @@ export function ChatView({
               id={m.id}
               title={m.question}
               accessories={
-                m.id === displayedPendingId ? [{ text: spinner }] : undefined
+                m.id === displayedPendingId && !stream.text
+                  ? [{ text: "Thinking…" }]
+                  : undefined
               }
               icon={
                 m.error
                   ? Icon.ExclamationMark
-                  : m.id === displayedPendingId
-                    ? Icon.CircleProgress
-                    : m.commands?.length
-                      ? Icon.Terminal
-                      : Icon.Message
+                  : m.commands?.length
+                    ? Icon.Terminal
+                    : Icon.Message
               }
               detail={<List.Item.Detail markdown={detailOf(m)} />}
               actions={
                 <ActionPanel>
                   {sendAction}
+                  {m.answer && !isLoading ? (
+                    <Action.CopyToClipboard
+                      title="Copy Answer"
+                      content={m.answer}
+                      shortcut={Keyboard.Shortcut.Common.Copy}
+                    />
+                  ) : null}
+                  {!isLoading &&
+                  !pendingId &&
+                  m.id === conversation.messages.at(-1)?.id ? (
+                    <Action
+                      title="Retry"
+                      icon={Icon.ArrowClockwise}
+                      shortcut={Keyboard.Shortcut.Common.Refresh}
+                      onAction={() => retry(m)}
+                    />
+                  ) : null}
                   {m.commands?.length && !stream.isLoading ? (
                     <ActionPanel.Section>
                       {m.commands.map((c) => (
@@ -462,17 +506,10 @@ export function ChatView({
                     </ActionPanel.Section>
                   ) : null}
                   {m.answer ? (
-                    <>
-                      <Action.Paste
-                        title="Paste to Active App"
-                        content={m.answer}
-                      />
-                      <Action.CopyToClipboard
-                        title="Copy Answer"
-                        content={m.answer}
-                        shortcut={Keyboard.Shortcut.Common.Copy}
-                      />
-                    </>
+                    <Action.Paste
+                      title="Paste to Active App"
+                      content={m.answer}
+                    />
                   ) : null}
                   {isLoading ? (
                     <Action
@@ -565,5 +602,5 @@ export function commandsMarkdown(commands: string[] | undefined): string {
   if (!commands?.length) return "";
   const blocks = commands.map((c) => `\`\`\`sh\n${c}\n\`\`\``).join("\n\n");
   const verb = commands.length === 1 ? "this command" : "these commands";
-  return `\n\n---\n\n**Wants to run ${verb}** (runs only if you approve it; ↵ or ⌘K):\n\n${blocks}`;
+  return `\n\n---\n\n**Wants to run ${verb}** (choose Run Command in Actions to approve):\n\n${blocks}`;
 }

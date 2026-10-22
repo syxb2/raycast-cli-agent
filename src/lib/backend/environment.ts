@@ -174,6 +174,22 @@ function fileStamp(path: string): string {
   }
 }
 
+// Launcher and shell bookkeeping changes between Raycast commands without
+// changing the CLI's configuration, credentials or available models.
+const TRANSIENT_ENVIRONMENT_KEYS = new Set([
+  "_",
+  "PWD",
+  "OLDPWD",
+  "SHLVL",
+  "TERM_SESSION_ID",
+  "ITERM_SESSION_ID",
+  "XPC_SERVICE_NAME",
+  "XPC_FLAGS",
+  "NODE_CHANNEL_FD",
+  "NODE_CHANNEL_SERIALIZATION_MODE",
+  "NODE_UNIQUE_ID",
+]);
+
 // A changed config creates a fresh runtime; native session identities survive.
 export function runtimeFingerprint(
   provider: Provider,
@@ -182,6 +198,7 @@ export function runtimeFingerprint(
   settings: ProviderSettings = getProviderSettings(provider),
 ): string {
   const dir = configDirectory(provider, env, settings);
+  const overrides = parseEnvironmentVariables(settings.environmentVariables);
   const files =
     provider === "codex"
       ? ["config.toml", "auth.json"]
@@ -195,7 +212,14 @@ export function runtimeFingerprint(
         fileStamp(binary),
         dir,
         ...files.map((file) => fileStamp(join(dir, file))),
-        Object.entries(env).sort(([a], [b]) => a.localeCompare(b)),
+        Object.entries(env)
+          .filter(
+            ([key]) =>
+              Object.hasOwn(overrides, key) ||
+              (!TRANSIENT_ENVIRONMENT_KEYS.has(key) &&
+                !key.startsWith("RAYCAST_")),
+          )
+          .sort(([a], [b]) => a.localeCompare(b)),
       ]),
     )
     .digest("hex");
