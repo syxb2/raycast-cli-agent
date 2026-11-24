@@ -2,8 +2,12 @@
 
 ## [Unreleased]
 
+## [v1.4] - 2026-11-24
+
 - Add Antigravity CLI (`agy`) support via the Agent Client Protocol (`agy acp`), including independent provider settings, model discovery without inference, streaming text and tool steps, `session/resume` session persistence, reasoning effort (`thought_level`), independent web search, and No Tools / Read-only Tools / All Tools permission levels with reviewed command approval
 - Replace readline stdout splitting in the JSONL RPC transport with `\n`-delimited UTF-8 buffering and optional zero-timeout support for long-running streaming requests
+
+[Full changelog](https://github.com/syxb2/raycast-cli-agent/compare/v1.3...v1.4)
 
 ## [v1.3] - 2026-10-22
 
