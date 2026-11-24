@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
+  ANTIGRAVITY_DEFAULT,
   CLAUDE_DEFAULT,
   PROVIDERS,
   CODEX_DEFAULT,
@@ -83,7 +84,20 @@ export const CLAUDE_EFFORTS: Effort[] = [
   "max",
 ];
 
+export const ANTIGRAVITY_EFFORTS: Effort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
 export interface ClaudeSettings extends ProviderSettings {
+  effort: Effort | "";
+  webSearch: boolean;
+}
+
+export interface AntigravitySettings extends ProviderSettings {
   effort: Effort | "";
   webSearch: boolean;
 }
@@ -97,6 +111,7 @@ export interface ProviderSettingsMap {
   codex: CodexSettings;
   pi: PiSettings;
   claude: ClaudeSettings;
+  antigravity: AntigravitySettings;
 }
 export interface Settings {
   version: 1;
@@ -138,6 +153,13 @@ export function defaultSettings(): Settings {
         ...common(),
         enabled: false,
         defaultModel: CLAUDE_DEFAULT,
+        effort: "",
+        webSearch: false,
+      },
+      antigravity: {
+        ...common(),
+        enabled: false,
+        defaultModel: ANTIGRAVITY_DEFAULT,
         effort: "",
         webSearch: false,
       },
@@ -253,6 +275,10 @@ export function getSettings(): Settings {
         defaults.providers.claude,
         stored.providers?.claude,
       ),
+      antigravity: migrateProviderSettings(
+        defaults.providers.antigravity,
+        stored.providers?.antigravity,
+      ),
     },
   };
 }
@@ -360,6 +386,9 @@ function validateSettings(settings: Settings): void {
   const claude = settings.providers.claude;
   if (claude.effort && !CLAUDE_EFFORTS.includes(claude.effort))
     throw new Error("Invalid Claude reasoning effort.");
+  const antigravity = settings.providers.antigravity;
+  if (antigravity.effort && !ANTIGRAVITY_EFFORTS.includes(antigravity.effort))
+    throw new Error("Invalid Antigravity reasoning effort.");
   const pi = settings.providers.pi;
   if (pi.thinkingLevel && !PI_THINKING_LEVELS.includes(pi.thinkingLevel))
     throw new Error("Invalid Pi thinking level.");

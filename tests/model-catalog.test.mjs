@@ -8,10 +8,10 @@ import { test } from "node:test";
 const modules = {
   "catalog-test-state": `export const state = {
     files: new Map(), reads: 0, settingsReads: 0, calls: [], toasts: [],
-    keys: {codex:"codex-key", pi:"pi-key", claude:"claude-key"},
+    keys: {codex:"codex-key", pi:"pi-key", claude:"claude-key", antigravity:"antigravity-key"},
     settings: { general: {defaultProvider:"codex"}, providers: Object.fromEntries(
-      ["codex", "pi", "claude"].map(p => [p, {
-        enabled:p!=="claude", defaultModel:p+":default", visibleModels:null,
+      ["codex", "pi", "claude", "antigravity"].map(p => [p, {
+        enabled:p!=="claude" && p!=="antigravity", defaultModel:p+":default", visibleModels:null,
         customModels:[], modelAliases:{}
       }])
     )},
@@ -46,7 +46,7 @@ const modules = {
       if(prev && deps.every((d,j)=>Object.is(d,prev.deps[j]))) return;
       h.effects.push(()=>{prev?.cleanup?.();h.slots[i]={deps,cleanup:fn()};});};`,
 };
-for (const provider of ["codex", "pi", "claude"])
+for (const provider of ["codex", "pi", "claude", "antigravity"])
   modules[`./${provider}`] = `import {state} from "catalog-test-state";
     export const fetch${provider[0].toUpperCase() + provider.slice(1)}Models=()=>{
       state.calls.push("${provider}");return state.fetch.${provider}();};`;
@@ -102,7 +102,7 @@ function setup() {
     require,
   );
   const api = module.exports;
-  for (const provider of ["codex", "pi", "claude"])
+  for (const provider of ["codex", "pi", "claude", "antigravity"])
     api.state.fetch[provider] = async () => [row(`${provider}:fresh`)];
   return api;
 }

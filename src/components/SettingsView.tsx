@@ -30,6 +30,7 @@ import {
   providerOf,
 } from "../lib/provider";
 import {
+  ANTIGRAVITY_EFFORTS,
   CLAUDE_EFFORTS,
   CODEX_EFFORTS,
   PI_THINKING_LEVELS,
@@ -371,6 +372,12 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
         effort: value.effort,
         webSearch: value.webSearch,
       });
+    else if (provider === "antigravity")
+      updateProviderSettings("antigravity", {
+        ...common,
+        effort: value.effort,
+        webSearch: value.webSearch,
+      });
     else
       updateProviderSettings("pi", {
         ...common,
@@ -417,7 +424,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       ? CODEX_EFFORTS
       : provider === "claude"
         ? CLAUDE_EFFORTS
-        : PI_THINKING_LEVELS;
+        : provider === "antigravity"
+          ? ANTIGRAVITY_EFFORTS
+          : PI_THINKING_LEVELS;
   return (
     <Form
       navigationTitle={`${PROVIDER_NAMES[provider]} Settings`}
@@ -465,7 +474,7 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
       <Form.TextField
         id="cliPath"
         title="CLI Path"
-        placeholder={`/opt/homebrew/bin/${provider} (empty to discover)`}
+        placeholder={`/opt/homebrew/bin/${provider === "antigravity" ? "agy" : provider} (empty to discover)`}
         value={draft.cliPath}
         onChange={(value) => set("cliPath", value)}
       />
@@ -477,7 +486,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
             ? "CODEX_HOME or ~/.codex"
             : provider === "claude"
               ? "CLAUDE_CONFIG_DIR or ~/.claude"
-              : "PI_CODING_AGENT_DIR or ~/.pi/agent"
+              : provider === "antigravity"
+                ? "~/.gemini/antigravity-cli"
+                : "PI_CODING_AGENT_DIR or ~/.pi/agent"
         }
         value={draft.configDir}
         onChange={(value) => set("configDir", value)}
@@ -508,7 +519,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
           placeholder={
             provider === "codex"
               ? "my-model\ncodex:another-model"
-              : "sonnet\nclaude:my-custom-model"
+              : provider === "antigravity"
+                ? "gemini-4-argon\nantigravity:my-model"
+                : "sonnet\nclaude:my-custom-model"
           }
           value={draft.customModelsText}
           onChange={(value) => set("customModelsText", value)}
@@ -682,7 +695,9 @@ function ProviderSettingsForm({ provider }: { provider: Provider }) {
             ? "HTTPS_PROXY=http://127.0.0.1:7890"
             : provider === "claude"
               ? "ANTHROPIC_BASE_URL=https://your-gateway.example"
-              : "PI_CODING_AGENT_DIR=/path/to/pi/agent"
+              : provider === "antigravity"
+                ? "HTTPS_PROXY=http://127.0.0.1:7890"
+                : "PI_CODING_AGENT_DIR=/path/to/pi/agent"
         }
       />
     </Form>

@@ -11,6 +11,7 @@ import { groupByProvider, ModelOption, matchingValue } from "../lib/models";
 import { effortsForProvider, RequestOptions } from "../lib/options";
 import { resolveCodexBinary } from "../lib/codex";
 import { resolveClaudeBinary } from "../lib/claude";
+import { resolveAntigravityBinary } from "../lib/antigravity";
 import { resolvePiBinary } from "../lib/pi";
 import { SettingsView } from "./SettingsView";
 import { Provider, PROVIDER_NAMES, providerOf } from "../lib/provider";
@@ -27,6 +28,8 @@ function loginCommand(provider: Provider | undefined): string {
   }
   if (provider === "claude")
     return `'${(resolveClaudeBinary() ?? "claude").replace(/'/g, "'\\''")}' auth login`;
+  if (provider === "antigravity")
+    return `'${(resolveAntigravityBinary() ?? "agy").replace(/'/g, "'\\''")}' acp --login`;
   return `'${(resolvePiBinary() ?? "pi").replace(/'/g, "'\\''")}'`;
 }
 

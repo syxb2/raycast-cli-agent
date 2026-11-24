@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add Antigravity CLI (`agy`) support via the Agent Client Protocol (`agy acp`), including independent provider settings, model discovery without inference, streaming text and tool steps, `session/resume` session persistence, reasoning effort (`thought_level`), independent web search, and No Tools / Read-only Tools / All Tools permission levels with reviewed command approval
+- Replace readline stdout splitting in the JSONL RPC transport with `\n`-delimited UTF-8 buffering and optional zero-timeout support for long-running streaming requests
+
 ## [v1.3] - 2026-10-22
 
 - Make Copy Answer the default Enter action after replies finish in Chat and answer views; keep sending typed follow-ups first and retain Retry on ⌘R

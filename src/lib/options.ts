@@ -2,6 +2,7 @@ import { currentModel } from "./models";
 import { Provider, providerOf } from "./provider";
 
 import {
+  ANTIGRAVITY_EFFORTS,
   CLAUDE_EFFORTS,
   CODEX_EFFORTS,
   PI_THINKING_LEVELS,
@@ -18,7 +19,9 @@ export function effortsForProvider(
       ? CODEX_EFFORTS
       : provider === "claude"
         ? CLAUDE_EFFORTS
-        : PI_THINKING_LEVELS
+        : provider === "antigravity"
+          ? ANTIGRAVITY_EFFORTS
+          : PI_THINKING_LEVELS
   ).map((value) => ({
     value,
     title:
@@ -44,7 +47,9 @@ export function defaultOptions(model = currentModel()): RequestOptions {
         ? getProviderSettings("codex").webSearch
         : provider === "claude"
           ? getProviderSettings("claude").webSearch
-          : undefined,
+          : provider === "antigravity"
+            ? getProviderSettings("antigravity").webSearch
+            : undefined,
     // Leave reasoning unset so the backend can resolve provider/model defaults.
   };
 }

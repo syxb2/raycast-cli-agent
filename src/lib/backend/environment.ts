@@ -87,6 +87,10 @@ export function expandPath(path: string): string {
   return resolve(path.replace(/^~(?=\/|$)/, homedir()));
 }
 
+export function binaryName(provider: Provider): string {
+  return provider === "antigravity" ? "agy" : provider;
+}
+
 export function configDirectory(
   provider: Provider,
   env: NodeJS.ProcessEnv = process.env,
@@ -99,9 +103,12 @@ export function configDirectory(
         ? settings.configDir ||
           env.CLAUDE_CONFIG_DIR ||
           join(homedir(), ".claude")
-        : settings.configDir ||
-          env.PI_CODING_AGENT_DIR ||
-          join(homedir(), ".pi/agent");
+        : provider === "antigravity"
+          ? settings.configDir ||
+            join(env.HOME || homedir(), ".gemini", "antigravity-cli")
+          : settings.configDir ||
+            env.PI_CODING_AGENT_DIR ||
+            join(homedir(), ".pi/agent");
   return expandPath(value);
 }
 
@@ -114,6 +121,7 @@ export function providerEnvironment(
     ...base,
     ...parseEnvironmentVariables(settings.environmentVariables),
   };
+  if (provider === "antigravity") return env;
   return {
     ...env,
     [provider === "codex"
@@ -130,24 +138,27 @@ export function resolveBinary(
   settings: ProviderSettings = getProviderSettings(provider),
 ): string | undefined {
   const custom = settings.cliPath;
+  const bin = binaryName(provider);
   const paths = custom
     ? [expandPath(custom)]
     : [
         ...(env.PATH || "")
           .split(delimiter)
           .filter(Boolean)
-          .map((dir) => join(dir, provider)),
-        `/opt/homebrew/bin/${provider}`,
-        `/usr/local/bin/${provider}`,
+          .map((dir) => join(dir, bin)),
+        `/opt/homebrew/bin/${bin}`,
+        `/usr/local/bin/${bin}`,
         ...[".local/bin", ".npm-global/bin", ".bun/bin"].map((dir) =>
-          join(homedir(), dir, provider),
+          join(homedir(), dir, bin),
         ),
         ...(provider === "codex"
           ? [
               "/Applications/Codex.app/Contents/Resources/codex",
               "/Applications/ChatGPT.app/Contents/Resources/codex",
             ]
-          : []),
+          : provider === "antigravity"
+            ? [join(homedir(), ".antigravity", "bin", "agy")]
+            : []),
       ];
   return paths.find((path) => {
     try {
@@ -204,7 +215,9 @@ export function runtimeFingerprint(
       ? ["config.toml", "auth.json"]
       : provider === "claude"
         ? ["settings.json", ".credentials.json", ".claude.json"]
-        : ["settings.json", "models.json", "auth.json"];
+        : provider === "antigravity"
+          ? ["settings.json", "installation_id", "mcp_config.json"]
+          : ["settings.json", "models.json", "auth.json"];
   return createHash("sha256")
     .update(
       JSON.stringify([

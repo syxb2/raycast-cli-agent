@@ -74,3 +74,30 @@ export function claudeToolStep(
     input,
   );
 }
+
+export function antigravityToolStep(
+  name: string,
+  input: Record<string, unknown>,
+): string {
+  const normalized = name.trim();
+  if (normalized === "search_web") {
+    const query = String(input.query || "").trim();
+    return query ? webStep(query) : SEARCHING_STEP;
+  }
+  if (normalized === "read_file")
+    return `📄 Read ${shortPath(String(input.Path || input.file_path || "file"))}`;
+  if (normalized === "write_file")
+    return `✏️ Wrote ${shortPath(String(input.Path || input.file_path || "file"))}`;
+  if (normalized === "edit_file")
+    return `✏️ Edited ${shortPath(String(input.Path || input.file_path || "file"))}`;
+  if (normalized === "run_command")
+    return `💻 Ran ${code(String(input.CommandLine || input.command || ""))}`;
+  if (normalized === "call_mcp_tool") {
+    const server =
+      typeof input.ServerName === "string" ? input.ServerName.trim() : "";
+    const tool =
+      typeof input.ToolName === "string" ? input.ToolName.trim() : "";
+    return server && tool ? `🔧 Used ${server}/${tool}` : "🔧 Used MCP tool";
+  }
+  return `🔧 Used ${normalized || "tool"}`;
+}

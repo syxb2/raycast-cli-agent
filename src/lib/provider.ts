@@ -1,14 +1,16 @@
-export const PROVIDERS = ["codex", "pi", "claude"] as const;
+export const PROVIDERS = ["codex", "pi", "claude", "antigravity"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 export const CODEX_PREFIX = "codex:";
 export const PI_PREFIX = "pi:";
 export const CLAUDE_PREFIX = "claude:";
+export const ANTIGRAVITY_PREFIX = "antigravity:";
 
 // Runs Codex with its own configured default model (no -m).
 export const CODEX_DEFAULT = `${CODEX_PREFIX}default`;
 export const PI_DEFAULT = `${PI_PREFIX}default`;
 export const CLAUDE_DEFAULT = `${CLAUDE_PREFIX}default`;
+export const ANTIGRAVITY_DEFAULT = `${ANTIGRAVITY_PREFIX}default`;
 
 export function nativeDefault(provider: Provider): string {
   return `${provider}:default`;
@@ -28,10 +30,16 @@ export function codexModelId(model: string): string | undefined {
   return id && id !== "default" ? id : undefined;
 }
 
+export function antigravityModelId(model: string): string | undefined {
+  const id = model.slice(ANTIGRAVITY_PREFIX.length);
+  return id && id !== "default" ? id : undefined;
+}
+
 export const PROVIDER_NAMES: Record<Provider, string> = {
   codex: "Codex",
   pi: "Pi Agent",
   claude: "Claude Code",
+  antigravity: "Antigravity",
 };
 
 export function piModelId(

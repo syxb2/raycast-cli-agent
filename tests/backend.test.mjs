@@ -20,18 +20,22 @@ const dir = mkdtempSync(join(tmpdir(), "cli-agent-test-"));
 const codexDir = join(dir, "codex");
 const piDir = join(dir, "pi");
 const claudeDir = join(dir, "claude");
-for (const path of [codexDir, piDir, claudeDir]) {
+const antigravityDir = join(dir, "antigravity");
+for (const path of [codexDir, piDir, claudeDir, antigravityDir]) {
   mkdirSync(path);
   writeFileSync(join(path, "fixture.json"), "{}");
 }
 const codexPath = join(dir, "fake-codex");
 const piPath = join(dir, "fake-pi");
 const claudePath = join(dir, "fake-claude");
-for (const path of [codexPath, piPath, claudePath]) {
+const antigravityPath = join(dir, "fake-antigravity");
+for (const path of [codexPath, piPath, claudePath, antigravityPath]) {
   copyFileSync(
     path === claudePath
       ? "tests/fixtures/fake-claude-cli.mjs"
-      : "tests/fixtures/fake-cli.mjs",
+      : path === antigravityPath
+        ? "tests/fixtures/fake-antigravity-cli.mjs"
+        : "tests/fixtures/fake-cli.mjs",
     path,
   );
   chmodSync(path, 0o755);
@@ -362,7 +366,7 @@ test("legacy tool settings migrate to one validated permission per agent", () =>
   }
 });
 
-for (const provider of ["codex", "pi", "claude"]) {
+for (const provider of ["codex", "pi", "claude", "antigravity"]) {
   test(`${provider} full tool access is independent and reversible in an existing chat`, async () => {
     const settings = backend.getProviderSettings(provider);
     const model = `${provider}:default`;
@@ -371,13 +375,21 @@ for (const provider of ["codex", "pi", "claude"]) {
       events()
         .filter((e) => e.provider === provider && e.event === "launch")
         .at(-1);
-    const configDir = { codex: codexDir, pi: piDir, claude: claudeDir }[
-      provider
-    ];
+    const configDir = {
+      codex: codexDir,
+      pi: piDir,
+      claude: claudeDir,
+      antigravity: antigravityDir,
+    }[provider];
     try {
       backend.updateProviderSettings(provider, {
         enabled: true,
-        cliPath: { codex: codexPath, pi: piPath, claude: claudePath }[provider],
+        cliPath: {
+          codex: codexPath,
+          pi: piPath,
+          claude: claudePath,
+          antigravity: antigravityPath,
+        }[provider],
         configDir,
         toolAccess: "none",
       });
@@ -390,7 +402,7 @@ for (const provider of ["codex", "pi", "claude"]) {
       const native = backend.loadNativeSession(sessionId, provider, configDir);
 
       backend.updateProviderSettings(provider, { toolAccess: "all" });
-      for (const other of ["codex", "pi", "claude"].filter(
+      for (const other of ["codex", "pi", "claude", "antigravity"].filter(
         (p) => p !== provider,
       ))
         assert.equal(backend.getProviderSettings(other).toolAccess, "none");
@@ -531,6 +543,31 @@ for (const provider of ["codex", "pi", "claude"]) {
           "default",
         );
         assert.ok(probe.args.includes("--strict-mcp-config"));
+      } else if (provider === "antigravity") {
+        assert.ok(launch.args.includes("--dangerously-skip-permissions"));
+        assert.ok(!launch.args.includes("--sandbox"));
+        assert.ok(
+          !launch.args.includes("--include-default-customizations=false"),
+        );
+        const resume = events()
+          .slice(start)
+          .findLast(
+            (e) =>
+              e.provider === "antigravity" &&
+              e.record?.method === "session/resume",
+          );
+        assert.ok(
+          !resume.record.params._meta.antigravity.systemPrompt.append.includes(
+            "File tools are read-only",
+          ),
+        );
+        await backend.fetchAntigravityModels();
+        const probe = launchFor();
+        assert.ok(!probe.args.includes("--dangerously-skip-permissions"));
+        assert.ok(probe.args.includes("--sandbox"));
+        assert.ok(
+          probe.args.includes("--include-default-customizations=false"),
+        );
       } else {
         assert.equal(launch.args[launch.args.indexOf("--tools") + 1], "*");
         for (const flag of [
@@ -607,6 +644,17 @@ for (const provider of ["codex", "pi", "claude"]) {
           ).record.result.permissions,
           {},
         );
+      } else if (provider === "antigravity") {
+        const args = launchFor().args;
+        assert.ok(!args.includes("--dangerously-skip-permissions"));
+        assert.ok(args.includes("--sandbox"));
+        assert.ok(args.includes("--include-default-customizations=false"));
+        const reply = events()
+          .slice(revertedStart)
+          .findLast(
+            (e) => e.provider === "antigravity" && e.event === "rpc_response",
+          );
+        assert.equal(reply.record.result.outcome.outcome, "cancelled");
       } else {
         const args = launchFor().args;
         assert.equal(
@@ -1782,7 +1830,7 @@ test("full refresh preserves the last complete Codex catalog after an RPC failur
   }
 });
 
-for (const provider of ["codex", "pi", "claude"]) {
+for (const provider of ["codex", "pi", "claude", "antigravity"]) {
   test(`${provider} enforces all three permission levels and keeps web search independent`, async () => {
     const original = backend.getProviderSettings(provider);
     const launchFor = () =>
@@ -1790,8 +1838,18 @@ for (const provider of ["codex", "pi", "claude"]) {
     try {
       backend.updateProviderSettings(provider, {
         enabled: true,
-        cliPath: { codex: codexPath, pi: piPath, claude: claudePath }[provider],
-        configDir: { codex: codexDir, pi: piDir, claude: claudeDir }[provider],
+        cliPath: {
+          codex: codexPath,
+          pi: piPath,
+          claude: claudePath,
+          antigravity: antigravityPath,
+        }[provider],
+        configDir: {
+          codex: codexDir,
+          pi: piDir,
+          claude: claudeDir,
+          antigravity: antigravityDir,
+        }[provider],
         ...(provider !== "pi" ? { webSearch: true } : {}),
       });
       for (const toolAccess of ["none", "read-only", "all", "none"]) {
@@ -1853,6 +1911,40 @@ for (const provider of ["codex", "pi", "claude"]) {
                   args[args.indexOf("--tools") + 1],
                   toolAccess === "all" ? "*" : "read,grep,find,ls",
                 );
+            } else if (provider === "antigravity") {
+              assert.equal(
+                args.includes("--dangerously-skip-permissions"),
+                toolAccess === "all",
+              );
+              assert.equal(args.includes("--sandbox"), toolAccess !== "all");
+              assert.equal(
+                args.includes("--include-default-customizations=false"),
+                toolAccess !== "all",
+              );
+              assert.equal(args.includes("--add-dir"), toolAccess !== "none");
+              const resume = events().findLast(
+                (e) =>
+                  e.provider === "antigravity" &&
+                  e.record?.method === "session/resume",
+              );
+              assert.deepEqual(
+                resume.record.params.additionalDirectories,
+                toolAccess === "none" ? undefined : [dir],
+              );
+              const append =
+                resume.record.params._meta.antigravity.systemPrompt.append;
+              assert.equal(
+                append.includes("Do not use any"),
+                toolAccess === "none",
+              );
+              assert.equal(
+                append.includes("File tools are read-only"),
+                toolAccess === "read-only",
+              );
+              assert.equal(
+                append.includes("Web search is disabled"),
+                toolAccess !== "none" && !webSearch,
+              );
             } else {
               const expected =
                 toolAccess === "all"
@@ -1965,5 +2057,400 @@ test("queued requests cannot retain a permission that was revoked before they st
   } finally {
     release?.();
     backend.updateProviderSettings("codex", previous);
+  }
+});
+
+test("Antigravity is an independent opt-in provider with validated models and effort", () => {
+  const settings = backend.getSettings();
+  assert.equal(settings.providers.antigravity.enabled, false);
+  assert.equal(
+    settings.providers.antigravity.defaultModel,
+    "antigravity:default",
+  );
+  assert.equal(settings.providers.antigravity.effort, "");
+  assert.equal(settings.providers.antigravity.webSearch, false);
+  assert.equal(backend.providerOf("antigravity:gemini-4-argon"), "antigravity");
+  assert.equal(backend.antigravityModelId("antigravity:default"), undefined);
+  assert.equal(
+    backend.antigravityModelId("antigravity:gemini-4-argon"),
+    "gemini-4-argon",
+  );
+  assert.equal(
+    backend.normalizeProviderModel("antigravity", "gemini-4-argon"),
+    "antigravity:gemini-4-argon",
+  );
+  assert.throws(() =>
+    backend.normalizeProviderModel("antigravity", "pi:default"),
+  );
+  assert.deepEqual(
+    backend.effortsForProvider("antigravity").map((e) => e.value),
+    ["low", "medium", "high", "xhigh", "max"],
+  );
+  assert.throws(() =>
+    backend.updateProviderSettings("antigravity", { effort: "off" }),
+  );
+});
+
+test("Antigravity discovers native models without inference, respects visibility, aliases and fingerprints", async () => {
+  const settings = backend.getProviderSettings("antigravity");
+  const previous = backend.loadCatalog();
+  const nativeSettings = join(antigravityDir, "settings.json");
+  try {
+    backend.updateProviderSettings("antigravity", {
+      enabled: true,
+      cliPath: antigravityPath,
+      configDir: antigravityDir,
+    });
+    const start = events().length;
+    await backend.refreshProviderCatalog("antigravity");
+    assert.equal(
+      backend.modelLabel("antigravity:default"),
+      "antigravity: gemini-4-argon",
+    );
+    assert.equal(
+      backend.sameModel("antigravity:default", "antigravity:gemini-4-argon"),
+      true,
+    );
+    assert.equal(backend.currentModel("antigravity"), "antigravity:default");
+    const launch = events()
+      .slice(start)
+      .find((e) => e.provider === "antigravity" && e.event === "launch");
+    assert.ok(launch.args.includes("acp"));
+    assert.ok(launch.args.includes("--sandbox"));
+    assert.ok(launch.args.includes("--include-default-customizations=false"));
+    assert.ok(launch.keyPreserved && launch.proxyPreserved);
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "session/prompt").length,
+      0,
+    );
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "session/close").length,
+      1,
+    );
+
+    const parsed = backend.readAntigravityModelList(
+      [
+        "gemini-4-neon-high\tGemini 4 Neon (High)",
+        "gemini-4-neon-low\tGemini 4 Neon (Low)",
+        "gpt-oss-120b-medium\tGPT-OSS 120B (Medium)",
+      ].join("\n"),
+    );
+    assert.equal(parsed[0].rawId, "gemini-4-neon");
+    assert.deepEqual(
+      parsed[0].reasoningEfforts.map((e) => e.value),
+      ["low", "high"],
+    );
+    assert.equal(parsed[1].rawId, "gpt-oss-120b-medium");
+    assert.deepEqual(parsed[1].reasoningEfforts, []);
+
+    backend.updateProviderSettings("antigravity", {
+      customModels: ["antigravity:gemini-4-argon", "custom-model"],
+    });
+    assert.equal(
+      backend
+        .browserModels("antigravity")
+        .filter((m) => m.value === "antigravity:gemini-4-argon").length,
+      1,
+    );
+    assert.ok(
+      backend
+        .browserModels("antigravity")
+        .some((m) => m.value === "antigravity:custom-model"),
+    );
+    backend.setVisibleModels("antigravity", ["antigravity:gemini-3.8-flash"]);
+    backend.updateProviderSettings("antigravity", {
+      customModels: ["custom-model"],
+      modelAliases: { "antigravity:gemini-3.8-flash": "Flash" },
+    });
+    assert.equal(
+      backend.visibleProviderModels("antigravity")[0].title,
+      "antigravity: Flash",
+    );
+    writeFileSync(nativeSettings, JSON.stringify({ model: "changed" }));
+    assert.deepEqual(
+      backend.browserModels("antigravity").map((m) => m.value),
+      ["antigravity:custom-model"],
+    );
+    backend.updateProviderSettings("antigravity", { enabled: false });
+    const blockedStart = events().length;
+    const disabled = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "disabled",
+    });
+    assert.match(disabled.error.message, /disabled/);
+    assert.equal(events().length, blockedStart);
+  } finally {
+    rmSync(nativeSettings, { force: true });
+    backend.updateProviderSettings("antigravity", settings);
+    if (previous) backend.saveCatalog(previous);
+  }
+});
+
+test("Antigravity streams text and steps, delivers system prompt on resume, and resumes bound session", async () => {
+  const settings = backend.getProviderSettings("antigravity");
+  try {
+    backend.updateProviderSettings("antigravity", {
+      enabled: true,
+      cliPath: antigravityPath,
+      configDir: antigravityDir,
+      effort: "high",
+      toolAccess: "read-only",
+    });
+    const updates = [];
+    const stepUpdates = [];
+    const first = await backend.runModel({
+      model: "antigravity:gemini-3.8-flash",
+      sessionId: "antigravity-chat",
+      prompt: "with-tool",
+      tools: true,
+      onText: (text) => updates.push(text),
+      onSteps: (steps) => stepUpdates.push(steps),
+    });
+    assert.equal(first.isError, false, first.error?.message);
+    assert.equal(first.text, "Antigravity answer: with-tool");
+    assert.ok(updates.includes("Antigravity"));
+    assert.deepEqual(first.steps, ["📄 Read /tmp/sample.txt"]);
+    assert.equal(stepUpdates.length, 2);
+
+    const newReq = requests("session/new").at(-1).record.params;
+    assert.equal(newReq._meta, undefined);
+    const firstResume = requests("session/resume").at(-1).record.params;
+    assert.ok(firstResume._meta.antigravity.systemPrompt.append);
+
+    const native = backend.loadNativeSession(
+      "antigravity-chat",
+      "antigravity",
+      antigravityDir,
+    );
+    assert.ok(native.id);
+    assert.equal(firstResume.sessionId, native.id);
+
+    const configSet = requests("session/set_config_option").map(
+      (e) => e.record.params,
+    );
+    assert.ok(
+      configSet.some(
+        (p) => p.configId === "model" && p.value === "gemini-3.8-flash-high",
+      ),
+    );
+
+    const secondStart = events().length;
+    const second = await backend.runModel({
+      model: "antigravity:gpt-oss-120b-medium",
+      sessionId: "antigravity-chat",
+      prompt: "follow-up",
+      effort: "low",
+    });
+    assert.equal(second.isError, false, second.error?.message);
+    assert.equal(
+      events()
+        .slice(secondStart)
+        .filter((e) => e.record?.method === "session/new").length,
+      0,
+    );
+    assert.equal(
+      events()
+        .slice(secondStart)
+        .find((e) => e.record?.method === "session/resume").record.params
+        .sessionId,
+      native.id,
+    );
+    // Fixed-effort model has no thought_level option, so thought_level must not be sent.
+    assert.equal(
+      events()
+        .slice(secondStart)
+        .filter(
+          (e) =>
+            e.record?.method === "session/set_config_option" &&
+            e.record?.params?.configId === "thought_level",
+        ).length,
+      0,
+    );
+    const denied = await backend.runModel({
+      model: "pi:default",
+      sessionId: "antigravity-chat",
+      prompt: "never send",
+    });
+    assert.match(denied.error.message, /bound to antigravity/);
+  } finally {
+    backend.updateProviderSettings("antigravity", settings);
+  }
+});
+
+test("Antigravity refuses wrong or missing native sessions without falling back to session/load", async () => {
+  const settings = backend.getProviderSettings("antigravity");
+  const fixture = join(antigravityDir, "fixture.json");
+  try {
+    backend.updateProviderSettings("antigravity", {
+      enabled: true,
+      cliPath: antigravityPath,
+      configDir: antigravityDir,
+    });
+    writeFileSync(fixture, JSON.stringify({ mismatch: true }));
+    const start = events().length;
+    const result = await backend.runModel({
+      model: "antigravity:default",
+      sessionId: "antigravity-chat",
+      prompt: "must not be sent",
+    });
+    assert.match(result.error.message, /different session/);
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "session/prompt").length,
+      0,
+    );
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "session/load").length,
+      0,
+    );
+    writeFileSync(fixture, "{}");
+    backend.saveNativeSession("antigravity-missing", "antigravity", {
+      id: "missing-native-session",
+      configDir: antigravityDir,
+    });
+    const missing = await backend.runModel({
+      model: "antigravity:default",
+      sessionId: "antigravity-missing",
+      prompt: "must not be sent",
+    });
+    assert.match(missing.error.message, /session missing/);
+    assert.equal(
+      events()
+        .slice(start)
+        .filter((e) => e.record?.method === "session/load").length,
+      0,
+    );
+  } finally {
+    writeFileSync(fixture, "{}");
+    backend.updateProviderSettings("antigravity", settings);
+  }
+});
+
+test("Antigravity cancellation, crashes, errors, web search, elicitation and command approval settle safely", async () => {
+  const settings = backend.getProviderSettings("antigravity");
+  try {
+    backend.updateProviderSettings("antigravity", {
+      enabled: true,
+      cliPath: antigravityPath,
+      configDir: antigravityDir,
+      toolAccess: "read-only",
+    });
+    const approval = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "approve",
+      tools: true,
+    });
+    assert.deepEqual(approval.commands, ["touch reviewed.txt"]);
+    assert.equal(approval.text, "Review this.");
+
+    const nativeApproval = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "approve-native",
+      tools: true,
+    });
+    assert.deepEqual(nativeApproval.commands, ["touch denied.txt"]);
+    assert.equal(nativeApproval.text, "Done.");
+
+    for (const toolAccess of ["read-only", "all"]) {
+      backend.updateProviderSettings("antigravity", { toolAccess });
+      for (const webSearch of [false, true]) {
+        const start = events().length;
+        const web = await backend.runModel({
+          model: "antigravity:default",
+          prompt: "web-search",
+          webSearch,
+        });
+        assert.equal(web.isError, false, web.error?.message);
+        const reply = events()
+          .slice(start)
+          .findLast(
+            (e) => e.provider === "antigravity" && e.event === "rpc_response",
+          );
+        assert.equal(
+          reply.record.result.outcome.outcome,
+          webSearch ? "selected" : "cancelled",
+        );
+      }
+    }
+    backend.updateProviderSettings("antigravity", { toolAccess: "read-only" });
+
+    const question = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "ask-question",
+    });
+    assert.equal(question.text, "Question outcome: cancel");
+
+    const crash = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "crash",
+    });
+    assert.equal(crash.isError, true);
+
+    const error = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "error",
+    });
+    assert.equal(error.error.kind, "not-logged-in");
+
+    const controller = new AbortController();
+    const pending = backend.runModel({
+      model: "antigravity:default",
+      prompt: "slow",
+      signal: controller.signal,
+    });
+    await until(() =>
+      events().some(
+        (e) =>
+          e.provider === "antigravity" &&
+          e.record?.method === "session/prompt" &&
+          e.record?.params?.prompt?.[0]?.text === "slow",
+      ),
+    );
+    controller.abort();
+    const cancelled = await pending;
+    assert.equal(cancelled.error.kind, "cancelled");
+
+    backend.updateProviderSettings("antigravity", {
+      cliPath: join(dir, "missing-agy"),
+    });
+    const missing = await backend.runModel({
+      model: "antigravity:default",
+      prompt: "no CLI",
+    });
+    assert.equal(missing.error.kind, "not-installed");
+  } finally {
+    backend.updateProviderSettings("antigravity", settings);
+  }
+});
+
+test("Antigravity can be the sole enabled and default provider", () => {
+  const previous = backend.getSettings();
+  try {
+    backend.updateProviderSettings("antigravity", { enabled: true });
+    backend.updateProviderSettings("codex", { enabled: false });
+    backend.updateProviderSettings("pi", { enabled: false });
+    backend.updateProviderSettings("claude", { enabled: false });
+    assert.equal(backend.getSettings().general.defaultProvider, "antigravity");
+    assert.deepEqual(backend.enabledProviders(), ["antigravity"]);
+    assert.throws(
+      () => backend.updateProviderSettings("antigravity", { enabled: false }),
+      /at least one/,
+    );
+  } finally {
+    backend.updateProviderSettings("codex", previous.providers.codex);
+    backend.updateProviderSettings("pi", previous.providers.pi);
+    backend.updateProviderSettings("claude", previous.providers.claude);
+    backend.updateProviderSettings(
+      "antigravity",
+      previous.providers.antigravity,
+    );
+    backend.updateGeneralSettings(previous.general);
   }
 });

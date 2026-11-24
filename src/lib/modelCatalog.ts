@@ -3,6 +3,7 @@ import { showToast, Toast } from "@raycast/api";
 import { fetchCodexModels } from "./codex";
 import { fetchPiModels } from "./pi";
 import { fetchClaudeModels } from "./claude";
+import { fetchAntigravityModels } from "./antigravity";
 import {
   availableModels,
   loadCatalog,
@@ -19,6 +20,7 @@ const fetchProviderModels = (provider: Provider) =>
     codex: fetchCodexModels,
     pi: fetchPiModels,
     claude: fetchClaudeModels,
+    antigravity: fetchAntigravityModels,
   })[provider]();
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;

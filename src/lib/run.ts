@@ -1,6 +1,7 @@
 import { runCodex } from "./codex";
 import { runPi } from "./pi";
 import { runClaude } from "./claude";
+import { runAntigravity } from "./antigravity";
 import { getProviderSettings } from "./settings";
 import { currentModel } from "./models";
 import { providerOf } from "./provider";
@@ -37,7 +38,9 @@ export async function runModel(opts: RunOptions): Promise<RunResult> {
         ? runCodex(request)
         : provider === "claude"
           ? runClaude(request)
-          : runPi(request);
+          : provider === "antigravity"
+            ? runAntigravity(request)
+            : runPi(request);
     });
   } catch (error) {
     return {

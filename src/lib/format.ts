@@ -46,19 +46,24 @@ export function footerMarkdown(
 export function errorMarkdown(error: ModelError): string {
   const codex = error.provider === "codex";
   const claude = error.provider === "claude";
+  const antigravity = error.provider === "antigravity";
   switch (error.kind) {
     case "not-installed":
       return codex
         ? "## Codex CLI not found\n\nInstall it: `brew install codex` (or `npm i -g @openai/codex`). The ChatGPT app also ships one.\n\nIf it lives elsewhere, set **CLI Path** in **Cli Agent Settings → Codex**."
         : claude
           ? "## Claude Code CLI not found\n\nInstall Claude Code and set **CLI Path** in **Cli Agent Settings → Claude Code** if needed."
-          : "## Pi Agent CLI not found\n\nInstall Pi Agent and set **CLI Path** in **Cli Agent Settings → Pi Agent** if needed.";
+          : antigravity
+            ? "## Antigravity CLI not found\n\nInstall Antigravity (`agy`) and set **CLI Path** in **Cli Agent Settings → Antigravity** if needed."
+            : "## Pi Agent CLI not found\n\nInstall Pi Agent and set **CLI Path** in **Cli Agent Settings → Pi Agent** if needed.";
     case "not-logged-in":
       return codex
         ? `## Not logged in to Codex\n\nUse \`codex login\` or configure your provider credentials in the local Codex configuration.\n\n\`\`\`\n${error.message}\n\`\`\``
         : claude
           ? `## Not logged in to Claude Code\n\nRun \`claude auth login\` in a terminal, or configure your local provider credentials.\n\n${error.message}`
-          : `## Pi authentication failed\n\nRun \`pi\` in a terminal and use \`/login\`, or configure your local provider credentials.\n\n\`\`\`\n${error.message}\n\`\`\``;
+          : antigravity
+            ? `## Not logged in to Antigravity\n\nRun \`agy acp --login\` in a terminal, or configure your local provider credentials.\n\n\`\`\`\n${error.message}\n\`\`\``
+            : `## Pi authentication failed\n\nRun \`pi\` in a terminal and use \`/login\`, or configure your local provider credentials.\n\n\`\`\`\n${error.message}\n\`\`\``;
     case "usage-limit":
       return `## Usage limit reached\n\n${error.message}`;
     case "cancelled":

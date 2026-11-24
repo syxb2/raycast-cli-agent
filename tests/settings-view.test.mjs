@@ -11,7 +11,7 @@ const modules = {
   "settings-test-state": `export const state = {
     models: [], listeners: new Set(), labelCalls: 0,
     environment: Promise.resolve(), providers: Object.fromEntries(
-      ["codex", "pi", "claude"].map(p => [p, {
+      ["codex", "pi", "claude", "antigravity"].map(p => [p, {
         enabled: true, cliPath: "", configDir: "", environmentVariables: "",
         defaultModel: p+":default", visibleModels: [], customModels: [],
         modelAliases: {}, preferredThinkingByModel: {}, toolAccess: "read-only",
@@ -34,7 +34,7 @@ const modules = {
     export const sameModel = (a,b) => a === b;
     export const subscribeCatalog = fn => {state.listeners.add(fn);return () => state.listeners.delete(fn);};`,
   "../lib/settings": `import {state} from "settings-test-state";
-    export const CLAUDE_EFFORTS=[], CODEX_EFFORTS=[], PI_THINKING_LEVELS=[], TOOL_ACCESS_OPTIONS=[];
+    export const ANTIGRAVITY_EFFORTS=[], CLAUDE_EFFORTS=[], CODEX_EFFORTS=[], PI_THINKING_LEVELS=[], TOOL_ACCESS_OPTIONS=[];
     export const defaultSettings = () => ({providers: state.providers});
     export const getSettings = () => ({general:{}, providers: state.providers});
     export const normalizeProviderModel = (p, value) => {
@@ -121,6 +121,7 @@ for (const [provider, model] of [
   ["pi", "pi:deepseek/deepseek-flash"],
   ["claude", "claude:opus"],
   ["codex", "codex:gpt-6.1-sol"],
+  ["antigravity", "antigravity:gemini-4-argon"],
 ]) {
   test(`${provider} settings preserve selected values through missing, loaded and invalidated catalogs`, async () => {
     const { state, host } = setup(provider, [model]);
